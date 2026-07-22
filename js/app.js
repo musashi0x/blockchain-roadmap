@@ -27,6 +27,12 @@
   const modColor = {};
   modules.forEach(m => modColor[m.id] = m.color);
 
+  // the header count is derived, so adding a module never leaves it stale
+  (function brandCount() {
+    const em = document.querySelector('.brand-text em');
+    if (em) em.textContent = lessons.length + ' lessons · ' + modules.length + ' modules · live labs';
+  })();
+
   function lessonsOf(mid) { return lessons.filter(l => l.module === mid); }
 
   /* ---------------- progress ---------------- */
@@ -551,7 +557,7 @@
   function route() {
     closeNav();
     const h = location.hash.replace(/^#/, '');
-    const mm = h.match(/^\/lesson\/([a-z0-9]+)/i);
+    const mm = h.match(/^\/lesson\/([a-z0-9-]+)/i);
     if (mm) renderLesson(mm[1]);
     else renderHome();
   }
@@ -629,7 +635,7 @@
 
     if (e.key === '/') { e.preventDefault(); $('#search').focus(); return; }
 
-    const cur = (location.hash.match(/^#\/lesson\/([a-z0-9]+)/i) || [])[1];
+    const cur = (location.hash.match(/^#\/lesson\/([a-z0-9-]+)/i) || [])[1];
     const l = cur && byId[cur];
     if (!l) return;
     if (e.key === 'ArrowLeft' && lessons[l._i - 1]) location.hash = '#/lesson/' + lessons[l._i - 1].id;

@@ -159,6 +159,12 @@
 
   var W = 900;
 
+  add('advanced-mev', 'MEV supply chain', 'Orderflow becomes a block only after competing searchers and builders choose an ordering.', W, 285, (function () { var s = box({x:45,y:110,w:190,h:60,t:'wallet',sub:'minOut + deadline',c:'ok'}); s += box({x:350,y:110,w:190,h:60,t:'orderflow',sub:'mempool / relay',c:'acc'}); s += box({x:655,y:110,w:190,h:60,t:'block',sub:'builder ordering',c:'hot'}); return s + arr(235,140,350,140,'ok') + arr(540,140,655,140,'acc') + note(35,30,'PRIVATE FLOW AND TIGHT SLIPPAGE REDUCE, NOT ELIMINATE, ORDERING RISK'); })());
+  add('advanced-xchain', 'Cross-chain message guard', 'Verify source evidence, then enforce domain and single-use consumption before handling a payload.', W, 285, (function () { var s = box({x:45,y:110,w:190,h:60,t:'source message',sub:'domain + nonce',c:'ok'}); s += box({x:350,y:110,w:190,h:60,t:'verifier',sub:'proof / signer set',c:'acc'}); s += box({x:655,y:110,w:190,h:60,t:'receiver',sub:'replay check',c:'hot'}); return s + arr(235,140,350,140,'ok') + arr(540,140,655,140,'acc') + note(35,30,'VERIFICATION DOES NOT REPLACE APPLICATION AUTHORIZATION'); })());
+  add('advanced-aa', 'Smart-account capability', 'A session key passes account and paymaster validation only within its target, value and expiry policy.', W, 285, (function () { var s = box({x:45,y:110,w:190,h:60,t:'session key',sub:'limited capability',c:'ok'}); s += box({x:350,y:110,w:190,h:60,t:'EntryPoint',sub:'validate UserOp',c:'acc'}); s += box({x:655,y:110,w:190,h:60,t:'smart account',sub:'execute or reject',c:'hot'}); return s + arr(235,140,350,140,'ok') + arr(540,140,655,140,'acc') + note(35,30,'DELEGATION WITHOUT LIMITS IS JUST ANOTHER OWNER KEY'); })());
+  add('advanced-crypto', 'Cryptographic authorization', 'The verifier needs the exact signer set, domain and lifecycle policy as well as a valid proof.', W, 285, (function () { var s = box({x:45,y:110,w:190,h:60,t:'message',sub:'domain-separated',c:'ok'}); s += box({x:350,y:110,w:190,h:60,t:'proof',sub:'KZG · BLS · threshold',c:'acc'}); s += box({x:655,y:110,w:190,h:60,t:'verifier',sub:'set + policy',c:'hot'}); return s + arr(235,140,350,140,'ok') + arr(540,140,655,140,'acc') + note(35,30,'VALID CRYPTOGRAPHY OVER THE WRONG DOMAIN IS NOT VALID AUTHORIZATION'); })());
+  add('advanced-indexer', 'Reorg-safe indexing', 'Ingest raw provenance, derive canonical views, and mark replaced branches non-canonical on reorg.', W, 285, (function () { var s = box({x:45,y:110,w:190,h:60,t:'blocks + logs',sub:'hash + parent',c:'ok'}); s += box({x:350,y:110,w:190,h:60,t:'indexer',sub:'idempotent decode',c:'acc'}); s += box({x:655,y:110,w:190,h:60,t:'canonical view',sub:'rollback aware',c:'hot'}); return s + arr(235,140,350,140,'ok') + arr(540,140,655,140,'acc') + note(35,30,'AUTHORITATIVE MONEY MOVES READ CHAIN STATE, NOT A STALE CACHE'); })());
+
   /* =========================================================
      MODULE 1 — foundations
      ========================================================= */
@@ -927,32 +933,336 @@
       return s;
     })());
 
+  add('sui-defi-amm', 'A Sui AMM mutates shared reserves and returns an owned output coin',
+    'The PTB supplies an owned input coin and a signed minOut. The shared pool calculates the output, updates both balances, then returns a new owned output coin or aborts.',
+    W, 285,
+    (function () {
+      var s = box({ x: 35, y: 102, w: 170, h: 64, t: 'input Coin<X>', sub: 'address-owned', c: 'ok' });
+      s += box({ x: 295, y: 102, w: 245, h: 64, t: 'shared Pool<X, Y>', sub: 'x · y = k  ·  fee', c: 'hot' });
+      s += box({ x: 630, y: 38, w: 190, h: 64, t: 'minOut check', sub: 'signed tolerance', c: 'acc' });
+      s += box({ x: 630, y: 190, w: 190, h: 64, t: 'output Coin<Y>', sub: 'address-owned', c: 'ok' });
+      s += arr(205, 134, 295, 134, 'ok', 'PTB input') + arr(540, 134, 630, 70, 'hot', 'quote') + arr(725, 102, 725, 190, 'acc', 'pass');
+      s += note(35, 30, 'OUTPUT BELOW minOut → ABORT; POOL STATE AND INPUT COIN DO NOT CHANGE');
+      return s;
+    })());
+
+  add('sui-defi-lending', 'A Sui lending action joins shared market risk with an owned position',
+    'The market holds common liquidity and the risk parameters; the borrower position holds individual collateral and scaled debt. A fresh oracle value determines whether borrowing or liquidation is allowed.',
+    W, 285,
+    (function () {
+      var s = box({ x: 35, y: 104, w: 180, h: 64, t: 'Position<C, D>', sub: 'owned collateral + debt', c: 'ok' });
+      s += box({ x: 295, y: 104, w: 220, h: 64, t: 'shared Market<C, D>', sub: 'liquidity · index · caps', c: 'hot' });
+      s += box({ x: 600, y: 38, w: 190, h: 64, t: 'validated oracle', sub: 'fresh normalized price', c: 'acc' });
+      s += box({ x: 600, y: 192, w: 190, h: 64, t: 'health factor', sub: 'borrow or liquidate', c: 'ok' });
+      s += arr(215, 136, 295, 136, 'ok', 'mutate') + arr(515, 136, 600, 70, 'hot', 'price') + arr(695, 102, 695, 192, 'acc', 'evaluate');
+      s += note(35, 30, 'STALE OR MANIPULABLE PRICE → PAUSE RISK-INCREASING ACTIONS');
+      return s;
+    })());
+
+  add('l44', 'Node roles separate consensus trust from public traffic',
+    'A validator keeps a narrow peer and signing boundary. Sentries absorb public P2P exposure, while public RPC is independently rate-limited and monitored.',
+    W, 285,
+    (function () {
+      var s = box({ x: 35, y: 104, w: 170, h: 64, t: 'public peers', sub: 'untrusted internet', c: 'acc' });
+      s += box({ x: 290, y: 104, w: 180, h: 64, t: 'sentry nodes', sub: 'P2P boundary', c: 'hot' });
+      s += box({ x: 555, y: 44, w: 190, h: 64, t: 'validator', sub: 'private signer + P2P', c: 'ok' });
+      s += box({ x: 555, y: 194, w: 190, h: 64, t: 'public RPC', sub: 'rate limit + cache', c: 'acc' });
+      s += arr(205, 136, 290, 136, 'acc', 'P2P') + arr(470, 136, 555, 76, 'hot', 'controlled peers') + arr(470, 136, 555, 226, 'acc', 'queries');
+      s += note(35, 30, 'SNAPSHOTS SPEED SYNC; CLIENT VERIFICATION STILL DEFINES TRUST');
+      return s;
+    })());
+
+  add('l45', 'Safe failover allows exactly one validator signer',
+    'A standby is not started merely because a health check fails. First fence the primary from the network and signing key, then verify signer identity and height before starting standby.',
+    W, 285,
+    (function () {
+      var s = box({ x: 35, y: 105, w: 190, h: 64, t: 'primary validator', sub: 'consensus signer', c: 'hot' });
+      s += box({ x: 315, y: 105, w: 190, h: 64, t: 'fence primary', sub: 'network + key blocked', c: 'acc' });
+      s += box({ x: 595, y: 105, w: 190, h: 64, t: 'standby validator', sub: 'may sign now', c: 'ok' });
+      s += arr(225, 137, 315, 137, 'hot', 'prove stopped') + arr(505, 137, 595, 137, 'ok', 'verify then start');
+      s += note(35, 30, 'TWO ACTIVE SIGNERS → DOUBLE-SIGN / SLASHING RISK');
+      return s;
+    })());
+
+  add('l46', 'Observability turns node signals into an incident decision',
+    'Metrics show lag, missed votes, disk forecasts and peer health. An alert names the risk and links an operator to a runbook; incidents preserve evidence while changes stay controlled.',
+    W, 285,
+    (function () {
+      var s = box({ x: 35, y: 104, w: 175, h: 64, t: 'node metrics', sub: 'lag · peers · disk', c: 'acc' });
+      s += box({ x: 295, y: 104, w: 190, h: 64, t: 'alert rule', sub: 'threshold + duration', c: 'hot' });
+      s += box({ x: 570, y: 44, w: 190, h: 64, t: 'runbook action', sub: 'safe first response', c: 'ok' });
+      s += box({ x: 570, y: 194, w: 190, h: 64, t: 'incident record', sub: 'timeline + follow-up', c: 'acc' });
+      s += arr(210, 136, 295, 136, 'acc', 'evaluate') + arr(485, 136, 570, 76, 'hot', 'page') + arr(665, 108, 665, 194, 'ok', 'evidence');
+      s += note(35, 30, 'AN ALERT WITHOUT A DECISION OR RUNBOOK IS ONLY A NOTIFICATION');
+      return s;
+    })());
+
+  add('l47', 'Infrastructure as code creates a repeatable recovery path',
+    'Versioned infrastructure defines host and network policy. Runtime secrets stay outside it; restore tests validate backups before an incident asks them to work.',
+    W, 285,
+    (function () {
+      var s = box({ x: 35, y: 104, w: 175, h: 64, t: 'IaC repository', sub: 'reviewed config', c: 'acc' });
+      s += box({ x: 290, y: 104, w: 190, h: 64, t: 'controlled rollout', sub: 'pinned release', c: 'hot' });
+      s += box({ x: 565, y: 44, w: 200, h: 64, t: 'node + secret system', sub: 'runtime authority only', c: 'ok' });
+      s += box({ x: 565, y: 194, w: 200, h: 64, t: 'isolated restore test', sub: 'measure recovery time', c: 'acc' });
+      s += arr(210, 136, 290, 136, 'acc', 'plan + apply') + arr(480, 136, 565, 76, 'hot', 'deploy') + arr(665, 108, 665, 194, 'ok', 'restore proof');
+      s += note(35, 30, 'A BACKUP IS A CLAIM UNTIL AN ISOLATED RESTORE PROVES IT');
+      return s;
+    })());
+
+  add('l45', 'MEV lives between signing and block inclusion', 'Public orderflow can reveal price impact; a signed minOut sets an on-chain execution limit.', W, 285, (function () { var s = box({x:35,y:105,w:160,h:64,t:'wallet swap',sub:'minOut + deadline',c:'ok'}); s += box({x:275,y:105,w:175,h:64,t:'mempool / relay',sub:'orderflow',c:'acc'}); s += box({x:530,y:40,w:180,h:64,t:'searcher',sub:'simulate + bid',c:'hot'}); s += box({x:530,y:195,w:180,h:64,t:'builder → block',sub:'chosen ordering',c:'ok'}); s += arr(195,137,275,137,'ok','submit') + arr(450,137,530,72,'acc','observe') + arr(620,104,620,195,'hot','bundle'); s += note(35,30,'WIDE SLIPPAGE CREATES ROOM; minOut TURNS THE USER LIMIT INTO CODE'); return s; })());
+  add('l46', 'A cross-chain receiver verifies origin before handling a message', 'Proof or bridge signatures establish a source claim. The app then checks domain, sender and replay state.', W, 285, (function () { var s = box({x:35,y:105,w:165,h:64,t:'source app',sub:'nonce + payload',c:'ok'}); s += box({x:280,y:105,w:180,h:64,t:'verification',sub:'proof / signer set',c:'acc'}); s += box({x:540,y:105,w:185,h:64,t:'destination app',sub:'domain + replay check',c:'hot'}); s += arr(200,137,280,137,'ok','message') + arr(460,137,540,137,'acc','verified claim'); s += note(35,30,'VERIFIED MESSAGE EXISTS ≠ AUTHORIZATION FOR ANY PAYLOAD'); return s; })());
+  add('l47', 'Smart-wallet policy validates a user operation before execution', 'The EntryPoint validates account and paymaster rules; a session key has narrow target, spend and expiry limits.', W, 285, (function () { var s = box({x:35,y:105,w:165,h:64,t:'session key',sub:'signed UserOp',c:'ok'}); s += box({x:280,y:105,w:180,h:64,t:'EntryPoint',sub:'account + paymaster',c:'acc'}); s += box({x:540,y:105,w:185,h:64,t:'smart account',sub:'policy-limited call',c:'hot'}); s += arr(200,137,280,137,'ok','bundle') + arr(460,137,540,137,'acc','validate'); s += note(35,30,'A SESSION KEY IS A CAPABILITY, NOT A SECOND UNRESTRICTED OWNER'); return s; })());
+  add('l48', 'Production cryptography binds parties to a domain', 'KZG commitments, BLS aggregation and threshold custody each need explicit signer, domain and lifecycle rules.', W, 285, (function () { var s = box({x:35,y:105,w:170,h:64,t:'data / message',sub:'domain-separated',c:'ok'}); s += box({x:285,y:105,w:180,h:64,t:'crypto proof',sub:'KZG · BLS · threshold',c:'acc'}); s += box({x:545,y:105,w:180,h:64,t:'verifier',sub:'set + domain + policy',c:'hot'}); s += arr(205,137,285,137,'ok','commit / sign') + arr(465,137,545,137,'acc','verify'); s += note(35,30,'A VALID SIGNATURE OVER THE WRONG DOMAIN IS STILL WRONG AUTHORIZATION'); return s; })());
+  add('l49', 'An indexer keeps a reversible canonical-chain view', 'Raw blocks become decoded events and product views. Reorg detection marks a replaced branch non-canonical.', W, 285, (function () { var s = box({x:35,y:105,w:165,h:64,t:'blocks + logs',sub:'hash + parent hash',c:'ok'}); s += box({x:280,y:105,w:180,h:64,t:'indexer',sub:'decode + idempotent write',c:'acc'}); s += box({x:540,y:40,w:185,h:64,t:'canonical views',sub:'queries + analytics',c:'hot'}); s += box({x:540,y:195,w:185,h:64,t:'reorg rollback',sub:'mark old branch false',c:'acc'}); s += arr(200,137,280,137,'ok','ingest') + arr(460,137,540,72,'acc','derive') + arr(632,104,632,195,'hot','replace'); s += note(35,30,'INDEXED DATA IS A PERFORMANCE LAYER; AUTHORIZATION USES CHAIN STATE'); return s; })());
+
+  /* =========================================================
+     MODULE 8 — Stellar & Soroban
+     ========================================================= */
+
+  add('stellar-assets', 'A path payment changes several ledger entries—or none',
+    'The recipient first creates a trustline and holds the reserve for it. At settlement, the sender’s XLM crosses offers and the recipient receives issuer-specific USD. The limit on the transaction protects the sender from a worse price.',
+    W, 310,
+    (function () {
+      var s = box({ x: 22, y: 114, w: 150, h: 64, t: 'sender', sub: 'spends XLM', c: 'ok' });
+      s += box({ x: 250, y: 42, w: 170, h: 62, t: 'trustline', sub: 'USD : GISSUER', c: 'acc' });
+      s += box({ x: 250, y: 202, w: 170, h: 62, t: 'recipient', sub: 'receives USD', c: 'ok' });
+      s += box({ x: 500, y: 114, w: 164, h: 64, t: 'offers / pools', sub: 'XLM → EUR → USD', c: 'hot' });
+      s += box({ x: 742, y: 114, w: 140, h: 64, t: 'anchor', sub: 'redeems USD', c: 'acc' });
+      s += arr(172, 146, 500, 146, 'ok', 'sendMax') + arr(664, 146, 742, 146, 'hot', 'credit') + arr(664, 170, 420, 234, 'ok', 'exact dest') + arr(335, 104, 335, 202, 'acc', 'must exist');
+      s += note(22, 28, 'STRICT RECEIVE: deliver destination amount OR REVERT THE ENTIRE TRANSACTION');
+      s += note(250, 292, 'TRUSTLINE = HOLDER CONSENT + BALANCE + LIMIT + XLM RESERVE');
+      return s;
+    })());
+
+  add('stellar-consensus', 'Every validator chooses a slice; safety needs overlap',
+    'Each circle is a validator’s sufficient trust set. The left configuration has overlapping 3-of-4 quorums; the right contains two separate quorums, so each group can make progress without hearing the other.',
+    W, 300,
+    (function () {
+      var s = txt(30, 28, 'QUORUM INTERSECTION', 'd-k') + txt(535, 28, 'NO INTERSECTION', 'd-k');
+      s += line(450, 40, 450, 272, 'dash thin');
+      [['A', 90, 105], ['B', 265, 70], ['C', 265, 180], ['D', 95, 210]].forEach(function (x) { s += box({ x: x[1], y: x[2], w: 92, h: 46, t: x[0], sub: '3 of 4', c: 'ok' }); });
+      s += line(182, 128, 265, 93, 'ok dash') + line(182, 128, 265, 203, 'ok dash') + line(311, 116, 311, 180, 'ok dash') + line(182, 233, 265, 203, 'ok dash');
+      s += note(34, 272, 'ANY TWO POSSIBLE QUORUMS SHARE HONEST VALIDATORS');
+      s += box({ x: 515, y: 110, w: 100, h: 52, t: 'A + B', sub: 'quorum', c: 'bad' });
+      s += box({ x: 740, y: 110, w: 100, h: 52, t: 'C + D', sub: 'quorum', c: 'bad' });
+      s += cur(615, 136, 112, 136, -48, 'bad dash', 'no shared validator');
+      s += note(514, 212, 'AB ∩ CD = ∅');
+      s += note(514, 238, 'TWO HISTORIES CAN EXTERNALISE');
+      return s;
+    })());
+
+  add('stellar-transactions', 'A signed envelope is bounded and atomic',
+    'The source sequence and time bound make one envelope unique and short-lived. At submission, enough signer weight must authorise every operation; then all operations apply, or a single failure rolls the entire transaction back.',
+    W, 300,
+    (function () {
+      var s = box({ x: 28, y: 112, w: 160, h: 62, t: 'transaction', sub: 'seq 481 · expires 5m', c: 'acc' });
+      s += box({ x: 265, y: 38, w: 160, h: 54, t: 'Signer A', sub: 'weight 1', c: 'ok' });
+      s += box({ x: 265, y: 122, w: 160, h: 54, t: 'Signer B', sub: 'weight 1', c: 'ok' });
+      s += box({ x: 265, y: 206, w: 160, h: 54, t: 'Signer C', sub: 'weight 1', c: '' });
+      s += box({ x: 510, y: 112, w: 155, h: 62, t: 'threshold check', sub: 'medium ≥ 2', c: 'hot' });
+      s += box({ x: 740, y: 112, w: 132, h: 62, t: 'operations', sub: 'pay → trustline', c: 'ok' });
+      s += arr(188, 143, 510, 143, 'acc', 'envelope') + arr(425, 65, 510, 124, 'ok', 'sign') + arr(425, 149, 510, 149, 'ok', 'sign') + arr(665, 143, 740, 143, 'hot', 'all or none');
+      s += note(28, 284, 'STALE SEQUENCE, EXPIRED TIME BOUND, MISSING WEIGHT OR ONE FAILED OPERATION → NOTHING APPLIES');
+      return s;
+    })());
+
+  add('soroban-auth-storage', 'Soroban binds authority to a storage change',
+    'An address parameter identifies who owns a value; require_auth verifies that the owner approved this invocation. The contract then chooses storage whose TTL matches the value’s intended lifetime and publishes an event for observers.',
+    W, 300,
+    (function () {
+      var s = box({ x: 28, y: 112, w: 145, h: 62, t: 'owner Address', sub: 'authorises call', c: 'ok' });
+      s += box({ x: 252, y: 112, w: 175, h: 62, t: 'require_auth()', sub: 'host checks tree', c: 'acc' });
+      s += box({ x: 505, y: 40, w: 170, h: 62, t: 'persistent state', sub: 'Count(owner) + TTL', c: 'hot' });
+      s += box({ x: 505, y: 198, w: 170, h: 52, t: 'temporary state', sub: 'nonce expires safely', c: '' });
+      s += box({ x: 755, y: 112, w: 115, h: 62, t: 'event', sub: 'count, owner', c: 'ok' });
+      s += arr(173, 143, 252, 143, 'ok') + arr(427, 130, 505, 72, 'acc', 'set') + arr(427, 156, 505, 224, '', 'cache') + arr(675, 103, 755, 136, 'hot', 'publish');
+      s += note(28, 284, 'ADDRESS WITHOUT AUTHORIZATION → REJECT. DURABLE VALUE WITHOUT TTL POLICY → EXPIRY RISK.');
+      return s;
+    })());
+
+  /* =========================================================
+     MODULE 9 — NFTs & GameFi
+     ========================================================= */
+
+  add('nft-metadata', 'One hop on chain, four hops of trust',
+    'Consensus protects the first box and nothing else. Every hop to the right of the line is somebody’s server, and any one of them can change what a holder sees without a transaction ever happening.',
+    W, 250,
+    (function () {
+      var s = txt(20, 26, 'CONSENSUS PROTECTS THIS', 'd-k') + txt(214, 26, 'SOMEBODY’S SERVER PROTECTS THESE', 'd-k');
+      s += line(194, 40, 194, 226, 'dash thin');
+      s += box({ x: 24, y: 86, w: 150, h: 66, t: 'ownerOf(42)', sub: '0xA11ce', c: 'ok' });
+      s += box({ x: 214, y: 86, w: 160, h: 66, t: 'tokenURI(42)', sub: 'just a string', c: 'acc' });
+      s += box({ x: 414, y: 86, w: 150, h: 66, t: 'host / gateway', sub: 'HTTP or a pin', c: 'hot' });
+      s += box({ x: 604, y: 86, w: 140, h: 66, t: 'metadata JSON', sub: 'name · traits', c: 'hot' });
+      s += box({ x: 784, y: 86, w: 92, h: 66, t: 'image', sub: 'bytes', c: 'hot' });
+      s += arr(174, 119, 214, 119, 'acc') + arr(374, 119, 414, 119, 'hot') +
+        arr(564, 119, 604, 119, 'hot') + arr(744, 119, 784, 119, 'hot');
+      s += mid(294, 182, 'a setter can repoint it', 'd-s') + mid(294, 200, 'unless frozen', 'd-m');
+      s += mid(489, 182, '404 · rate limit', 'd-s') + mid(489, 200, 'expired domain', 'd-m');
+      s += mid(674, 182, 'traits edited', 'd-s') + mid(674, 200, 'after the sale', 'd-m');
+      s += mid(830, 182, 'quietly', 'd-s') + mid(830, 200, 'replaced', 'd-m');
+      s += note(24, 234, 'CONTENT ADDRESSING MAKES HOPS 3-5 TAMPER-EVIDENT — IT DOES NOT MAKE THEM AVAILABLE');
+      return s;
+    })());
+
+  add('nft-metadata', 'The listing is a signature; only the buyer sends a transaction',
+    'The seller pays no gas and the order book never touches the chain. Settlement pulls the token using the approval the seller granted earlier — which is why that approval is the thing worth protecting.',
+    W, 300,
+    (function () {
+      var s = life(120, 40, 258, 'Seller', 'ok') + life(360, 40, 258, 'Market DB', '') +
+        life(600, 40, 258, 'Buyer', 'acc') + life(800, 40, 258, 'Exchange', 'hot');
+      s += arr(120, 110, 360, 110, 'ok', 'EIP-712 order, signed off chain');
+      s += arr(360, 148, 600, 148, '', 'listing shown');
+      s += arr(600, 190, 800, 190, 'acc', 'fill(order, sig) + payment');
+      s += cur(800, 226, 122, 226, 42, 'hot', 'transferFrom via setApprovalForAll');
+      s += note(24, 282, 'ONE TRANSACTION, PAID BY THE BUYER. A SIGNED ORDER PRICED AT ZERO SETTLES JUST AS CLEANLY.');
+      return s;
+    })());
+
+  add('gamefi-economy', 'Faucets fill it, only burns empty it',
+    'A fee routed to a treasury moves tokens; it does not remove them. Sink coverage is burned ÷ emitted over the same window, and below 1.0 the supply grows every single day.',
+    W, 310,
+    (function () {
+      var s = txt(20, 26, 'FAUCETS', 'd-k') + txt(690, 26, 'SINKS', 'd-k');
+      var faucets = [['quest rewards', 'scales with players'], ['staking emissions', 'dilution with steps'], ['airdrops · referrals', 'front-loaded']];
+      faucets.forEach(function (f, i) {
+        var y = 52 + i * 74;
+        s += box({ x: 24, y: y, w: 190, h: 58, t: f[0], sub: f[1], c: 'hot' });
+        s += arr(214, y + 29, 330, 150, 'hot');
+      });
+      s += cyl(330, 74, 200, 168, 'circulating supply', 'acc');
+      var sinks = [['burned upgrades', 'true sink', 'ok'], ['entry fees · repairs', 'recurring sink', 'ok'], ['fee to treasury', 'NOT a sink', 'bad']];
+      sinks.forEach(function (k, i) {
+        var y = 52 + i * 74;
+        s += box({ x: 660, y: y, w: 216, h: 58, t: k[0], sub: k[1], c: k[2] });
+        s += arr(530, 150, 660, y + 29, k[2] === 'bad' ? 'bad dash' : 'ok');
+      });
+      s += mid(450, 276, 'coverage = burned ÷ emitted', 'd-t');
+      s += mid(450, 294, 'below 1.0 the difference is paid for by the token price', 'd-m');
+      return s;
+    })());
+
+  add('gamefi-economy', 'The loop that built the chart also unwinds it',
+    'Players judge rewards in dollars per day, not in tokens, so price feeds growth and growth feeds price. Read it clockwise for the parabola and anticlockwise for the collapse — the collapse is faster, because selling is instant and onboarding is not.',
+    W, 290,
+    (function () {
+      var s = box({ x: 150, y: 56, w: 210, h: 62, t: 'token price up', sub: '', c: 'acc' });
+      s += box({ x: 540, y: 56, w: 210, h: 62, t: 'daily earnings up', sub: 'measured in USD', c: 'acc' });
+      s += box({ x: 540, y: 186, w: 210, h: 62, t: 'new players join', sub: 'to farm the reward', c: 'ok' });
+      s += box({ x: 150, y: 186, w: 210, h: 62, t: 'starter assets bought', sub: 'demand up', c: 'ok' });
+      s += arr(360, 87, 540, 87, 'acc') + arr(645, 118, 645, 186, 'acc') +
+        arr(540, 217, 360, 217, 'ok') + arr(255, 186, 255, 118, 'ok');
+      s += mid(450, 152, 'EVERY ARROW REVERSES', 'd-t');
+      s += mid(450, 172, 'and the reverse loop runs faster', 'd-m');
+      s += note(24, 278, 'IF TODAY’S REWARDS ARE FUNDED BY TOMORROW’S ENTRANTS, THE GAME IS THE SMALLER HALF OF WHAT YOU BUILT');
+      return s;
+    })());
+
+  add('game-assets', 'Simulate off chain, settle on chain, claim with a proof',
+    'A transaction per match is unaffordable and a transaction per frame is impossible. Batch the results into one Merkle root — the tree from lesson 4 — and let each player pay only for their own claim.',
+    W, 280,
+    (function () {
+      var s = txt(20, 26, 'OFF CHAIN — MILLISECONDS', 'd-k') + txt(470, 26, 'ON CHAIN — ONE WRITE', 'd-k');
+      s += line(450, 40, 450, 244, 'dash thin');
+      s += box({ x: 24, y: 60, w: 180, h: 54, t: 'match simulation', sub: 'positions · physics', c: '' });
+      s += box({ x: 24, y: 132, w: 180, h: 54, t: '40 000 results', sub: 'signed by the server', c: '' });
+      s += box({ x: 244, y: 96, w: 170, h: 62, t: 'Merkle root', sub: 'one 32-byte hash', c: 'acc' });
+      s += arr(204, 87, 244, 115, '') + arr(204, 159, 244, 140, '');
+      s += box({ x: 490, y: 96, w: 190, h: 62, t: 'settle(root)', sub: 'a single transaction', c: 'ok' });
+      s += box({ x: 730, y: 40, w: 146, h: 54, t: 'claim(proof)', sub: 'player A', c: 'ok' });
+      s += box({ x: 730, y: 160, w: 146, h: 54, t: 'claim(proof)', sub: 'player B', c: 'ok' });
+      s += arr(414, 127, 490, 127, 'acc') + arr(680, 115, 730, 76, 'ok') + arr(680, 140, 730, 180, 'ok');
+      s += note(24, 236, 'HIDDEN STATE GOES ON CHAIN AS A COMMITMENT, NEVER AS THE SECRET ITSELF');
+      s += note(24, 262, 'EACH PLAYER PAYS FOR THEIR OWN CLAIM; UNCLAIMED REWARDS COST THE STUDIO NOTHING');
+      return s;
+    })());
+
+  add('game-assets', 'Three randomness sources, three different attackers',
+    'Top: the roll happens inside the caller’s transaction, so a contract can discard any outcome it dislikes and retry for the price of gas. Middle: prediction is impossible, but the loser can refuse to reveal. Bottom: the result arrives in a transaction the player does not control.',
+    W, 400,
+    (function () {
+      // row 1 — the roll and the retry both live in the caller's transaction
+      var s = txt(20, 26, 'NAIVE — ONE TRANSACTION', 'd-k');
+      s += box({ x: 24, y: 40, w: 160, h: 52, t: 'attacker contract', sub: 'calls openBox()', c: 'bad' });
+      s += arr(184, 66, 250, 66, 'bad');
+      s += diamond(250, 34, 150, 64, 'legendary?', 'bad');
+      s += arr(400, 66, 470, 66, 'ok', 'yes') + box({ x: 470, y: 40, w: 150, h: 52, t: 'keep it', sub: 'transaction lands', c: 'ok' });
+      s += cur(325, 98, 104, 94, -44, 'bad dash');
+      s += mid(215, 150, 'no → revert the whole transaction and retry', 'd-m');
+      s += mid(762, 60, 'effective rate: 100%', 'd-t') + mid(762, 80, 'cost: gas per attempt', 'd-m');
+
+      // row 2 — unpredictable, but the loser still holds the second transaction
+      s += txt(20, 186, 'COMMIT-REVEAL — TWO TRANSACTIONS', 'd-k');
+      s += box({ x: 24, y: 200, w: 160, h: 52, t: 'commit', sub: 'hash(secret ‖ salt)', c: 'acc' });
+      s += arr(184, 226, 254, 226, 'acc', 'delay');
+      s += box({ x: 254, y: 200, w: 156, h: 52, t: 'future block', sub: 'unknown at commit', c: 'acc' });
+      s += arr(410, 226, 470, 226, 'acc');
+      s += box({ x: 470, y: 200, w: 150, h: 52, t: 'reveal', sub: 'roll settles', c: 'ok' });
+      s += cur(545, 258, 106, 254, -40, 'bad dash');
+      s += mid(325, 308, 'lost? simply never reveal — free unless the stake is forfeited', 'd-m');
+      s += mid(762, 220, 'unpredictable', 'd-t') + mid(762, 240, 'but withholdable', 'd-m');
+
+      // row 3 — the settling transaction is not the player's to abandon
+      s += txt(20, 344, 'VRF — REQUEST AND CALLBACK', 'd-k');
+      s += box({ x: 24, y: 358, w: 160, h: 40, t: 'open() pays', c: 'acc' });
+      s += arr(184, 378, 254, 378, 'acc', 'request');
+      s += box({ x: 254, y: 358, w: 166, h: 40, t: 'coordinator + proof', c: 'hot' });
+      s += arr(420, 378, 470, 378, 'hot') + box({ x: 470, y: 358, w: 150, h: 40, t: 'callback settles', c: 'ok' });
+      s += mid(762, 372, 'nothing to revert', 'd-t') + mid(762, 392, 'nothing to withhold', 'd-m');
+      return s;
+    })());
+
   /* =========================================================
      HOME — the whole roadmap on one line
      ========================================================= */
 
   function homeSvg() {
     var mods = (global.ROADMAP && global.ROADMAP.modules) || [];
-    var w = 900, h = 250;
+    var n = Math.max(1, mods.length);
+    // past six modules a single row squeezes the boxes below their own labels,
+    // so the route wraps onto a second row instead of shrinking
+    var rows = n <= 6 ? 1 : 2;
+    var perRow = Math.ceil(n / rows);
+    var gap = 12, x0 = 20, bh = 58, rowGap = 102;
+    var bw = Math.min(112, Math.floor((860 - gap * (perRow - 1)) / perRow));
+    var pitch = bw + gap;
+    var rowY = function (r) { return 48 + r * rowGap; };
+    var w = 900, h = rows === 1 ? 250 : 290;
+    var axisY = h - 38;
     var s = txt(20, 26, 'THE ROUTE', 'd-k');
-    var bw = 112, gap = 12, x0 = 20, y = 56;
     var body = '';
+    // one line each, kept short enough to sit inside its own column
+    var labels = {
+      1: 'hash · signatures', 2: 'UTXO · PoW · PoS', 3: 'EVM · gas · ERC',
+      4: 'test · deploy', 5: 'exploit · defend', 6: 'AMM · rollup · ZK',
+      7: 'objects · Move', 8: 'quorum · anchors', 9: 'metadata · sinks',
+      10: 'nodes · alerts', 11: 'MEV · bridges'
+    };
     mods.forEach(function (m, i) {
-      var x = x0 + i * (bw + gap);
-      body += '<rect x="' + x + '" y="' + y + '" width="' + bw + '" height="72" rx="3" class="d-box" ' +
+      var r = Math.floor(i / perRow), c = i % perRow;
+      var x = x0 + c * pitch, y = rowY(r), cx = x + bw / 2;
+      body += '<rect x="' + x + '" y="' + y + '" width="' + bw + '" height="' + bh + '" rx="3" class="d-box" ' +
         'style="stroke:' + m.color + ';fill:color-mix(in srgb, ' + m.color + ' 14%, transparent)"/>';
-      body += mid(x + bw / 2, y + 30, 'MODULE ' + m.id, 'd-k');
-      body += mid(x + bw / 2, y + 50, m.name.split(' ')[0].replace(/[^A-Za-z0-9]+$/, ''), 'd-t');
-      if (i < mods.length - 1) body += arr(x + bw, y + 36, x + bw + gap, y + 36, 'acc');
-      // drop line to a one-word outcome
-      var labels = ['hash · sign · prove', 'UTXO · PoW · PoS', 'EVM · gas · ERC', 'test · deploy · ship', 'exploit · defend', 'AMM · rollup · ZK', 'objects · Move · PTB'];
-      body += line(x + bw / 2, y + 72, x + bw / 2, y + 96 + (i % 2) * 22, 'thin dash');
-      body += mid(x + bw / 2, y + 112 + (i % 2) * 22, labels[i], 'd-m');
+      body += mid(cx, y + 24, 'MODULE ' + m.id, 'd-k');
+      body += mid(cx, y + 44, m.name.split(' ')[0].replace(/[^A-Za-z0-9]+$/, ''), 'd-t');
+      if (c < perRow - 1 && i < mods.length - 1) body += arr(x + bw, y + bh / 2, x + pitch, y + bh / 2, 'acc');
+      // tick down to the module's one-line outcome
+      body += line(cx, y + bh, cx, y + bh + 6, 'thin dash');
+      body += mid(cx, y + bh + 22, labels[m.id] || '', 'd-m');
     });
+    // wrap connector: out of the last box on row one, around, into row two
+    if (rows > 1 && mods.length > perRow) {
+      var lastX = x0 + (perRow - 1) * pitch + bw, midY = rowY(0) + bh / 2, turnY = rowY(1) - 16;
+      body += line(lastX, midY, 812, midY, 'thin dash');
+      body += line(812, midY, 812, turnY, 'thin dash');
+      body += line(812, turnY, x0 + bw / 2, turnY, 'thin dash');
+      body += arr(x0 + bw / 2, turnY, x0 + bw / 2, rowY(1), 'acc');
+    }
     s += body;
-    s += line(20, 212, 880, 212, 'thin');
-    s += txt(20, 236, 'BEGINNER', 'd-k') + txt(760, 236, 'PRODUCTION-READY', 'd-k');
-    s += arr(140, 212, 740, 212, 'hot');
+    s += line(20, axisY, 880, axisY, 'thin');
+    s += txt(20, axisY + 24, 'BEGINNER', 'd-k') + txt(760, axisY + 24, 'PRODUCTION-READY', 'd-k');
+    s += arr(140, axisY, 740, axisY, 'hot');
     return svg(w, h, s);
   }
 
@@ -1112,7 +1422,8 @@
 
   global.DIA = {
     get: function (id) { return D[id] || []; },
-    home: function () { return { title: 'Six modules, one path', cap: 'Each module assumes the one before it. The labs get harder in exactly the same order.', svg: homeSvg() }; },
+    // the title counts whatever the curriculum currently holds
+    home: function () { return { title: (((global.ROADMAP && global.ROADMAP.modules) || []).length || 0) + ' modules, one path', cap:'Each module assumes the one before it. The labs get harder in exactly the same order.', svg: homeSvg() }; },
     count: function () { var t = 0; for (var k in D) if (Object.prototype.hasOwnProperty.call(D, k)) t += D[k].length; return t; },
     ids: function () { return Object.keys(D); },
     animate: animate,

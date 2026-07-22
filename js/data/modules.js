@@ -4,7 +4,7 @@ window.ROADMAP = {
   meta: {
     title: 'Blockchain Roadmap',
     tagline: 'From hash functions to deployed DeFi contracts, one session at a time.',
-    totalHours: 39
+    totalHours: 63
   },
 
   modules: [
@@ -54,8 +54,36 @@ window.ROADMAP = {
       id: 7,
       name: 'Sui & Move',
       color: '#6cb7ff',
-      summary: 'An object-centric chain and a resource-oriented language: own assets, compose transaction blocks, design shared state, and integrate Sui’s application primitives.',
-      outcome: 'You can model assets as Sui objects, write and test a small Move package, and integrate Kiosk, sponsorship, walletless auth and on-chain liquidity safely.'
+      summary: 'An object-centric chain and a resource-oriented language: own assets, compose transaction blocks, design shared state, and integrate Sui DeFi primitives.',
+      outcome: 'You can model assets as Sui objects, write and test a small Move package, and integrate Kiosk, sponsorship, wallets, AMMs and lending markets safely.'
+    },
+    {
+      id: 8,
+      name: 'Stellar & Soroban',
+      color: '#0ec48d',
+      summary: 'A payment network with native multi-asset support, federated consensus without a closed validator set, multi-sig by threshold, and a WASM smart-contract host called Soroban.',
+      outcome: 'You can reason about quorum slices, build multi-sig and path-payment transactions, model trustlines and anchors, and write a small Soroban contract with explicit authorization and storage.'
+    },
+    {
+      id: 9,
+      name: 'NFTs & GameFi',
+      color: '#fb923c',
+      summary: 'What an NFT actually stores, how marketplaces and royalties really work, and how to design a game economy that does not eat itself.',
+      outcome: 'You can audit a collection’s metadata and approvals, size sinks against faucets before launch, and pick a randomness source an attacker cannot reroll.'
+    },
+    {
+      id: 10,
+      name: 'DevOps & Validator Operations',
+      color: '#a3e635',
+      summary: 'Run blockchain infrastructure safely: nodes, sentries, validator keys, observability, upgrades, incidents and reproducible automation.',
+      outcome: 'You can deploy, monitor, upgrade and recover a node or validator without treating key custody and consensus safety as afterthoughts.'
+    },
+    {
+      id: 11,
+      name: 'Advanced Protocol Systems',
+      color: '#c4b5fd',
+      summary: 'MEV, cross-chain messaging, smart wallets, production cryptography and reorg-safe data systems.',
+      outcome: 'You can evaluate the trust, ordering, custody and data-integrity assumptions behind production blockchain systems.'
     }
   ],
 

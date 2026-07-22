@@ -2237,6 +2237,629 @@ STOP</textarea></div>
       $$(el, 'input').forEach(i => i.oninput = run); $(el, '#sb-match').onclick = run; run();
     });
 
+  /* ---------- Sui AMM ---------- */
+  reg('suiamm', 'Shared-pool swap and slippage guard',
+    'Quote an exact-input swap, then let another trade move the shared pool before yours. Your signed minOut decides whether the transaction can execute.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Pool X reserve</label><input id="sam-x" type="number" value="100" min="1" step="1"></div>
+          <div class="field"><label>Pool Y reserve</label><input id="sam-y" type="number" value="200000" min="1" step="100"></div>
+          <div class="field"><label>Your X input</label><input id="sam-in" type="number" value="10" min="0.01" step="0.1"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Slippage tolerance (bps)</label><input id="sam-slip" type="number" value="50" min="0" max="5000" step="10"></div>
+          <div class="field"><label>Earlier X trade</label><input id="sam-before" type="number" value="0" min="0" step="0.1"></div>
+          <div class="field shrink"><button class="btn primary" id="sam-run">Evaluate swap</button></div>
+        </div>
+        <div class="out" id="sam-log"></div>`;
+      const quote = (input, x, y) => {
+        const effective = input * 0.997;
+        return (effective * y) / (x + effective);
+      };
+      function run() {
+        const x = Math.max(1, Number($(el, '#sam-x').value) || 1);
+        const y = Math.max(1, Number($(el, '#sam-y').value) || 1);
+        const amount = Math.max(0, Number($(el, '#sam-in').value) || 0);
+        const bps = Math.min(10_000, Math.max(0, Number($(el, '#sam-slip').value) || 0));
+        const earlier = Math.max(0, Number($(el, '#sam-before').value) || 0);
+        const quoted = quote(amount, x, y);
+        const minOut = quoted * (10_000 - bps) / 10_000;
+        const earlierOut = quote(earlier, x, y);
+        const actual = quote(amount, x + earlier, y - earlierOut);
+        const spot = y / x;
+        const executed = amount ? actual / amount : 0;
+        const status = actual >= minOut ? '<span class="good">SWAP CAN EXECUTE</span>' : '<span class="bad">SWAP ABORTS: minOut not met</span>';
+        $(el, '#sam-log').innerHTML =
+          `POOL AT SIGNING\n  spot price     ${num(spot, 2)} Y per X\n  quoted output  ${num(quoted, 2)} Y\n  signed minOut  ${num(minOut, 2)} Y\n\nPOOL AT EXECUTION\n  earlier trade   ${num(earlier, 2)} X → ${num(earlierOut, 2)} Y\n  actual output   ${num(actual, 2)} Y\n  execution price ${num(executed, 2)} Y per X\n  price impact    ${pct(spot ? (spot - executed) / spot : 0)}\n\n${status}\n\n<span class="dim">The earlier trade is ordered first because both swaps mutate the same shared Pool object. A PTB makes your input, pool update and output one atomic transaction once execution begins.</span>`;
+      }
+      $$(el, 'input').forEach(i => i.oninput = run); $(el, '#sam-run').onclick = run; run();
+    });
+
+  /* ---------- Sui lending ---------- */
+  reg('suilend', 'Health factor and liquidation boundary',
+    'Change collateral, price and debt in an overcollateralised Sui lending position. The market’s threshold and liquidation bonus determine when and how a liquidator can act.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Collateral (SUI)</label><input id="sl-coll" type="number" value="10" min="0" step="0.1"></div>
+          <div class="field"><label>SUI oracle price (USD)</label><input id="sl-price" type="number" value="2000" min="0" step="10"></div>
+          <div class="field"><label>Debt (USDC)</label><input id="sl-debt" type="number" value="10000" min="0" step="100"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Liquidation threshold (bps)</label><input id="sl-threshold" type="number" value="8250" min="1" max="10000" step="50"></div>
+          <div class="field"><label>Liquidation bonus (bps)</label><input id="sl-bonus" type="number" value="500" min="0" max="5000" step="50"></div>
+          <div class="field shrink"><button class="btn primary" id="sl-run">Evaluate position</button></div>
+        </div>
+        <div class="out" id="sl-log"></div>`;
+      function run() {
+        const collateral = Math.max(0, Number($(el, '#sl-coll').value) || 0);
+        const price = Math.max(0, Number($(el, '#sl-price').value) || 0);
+        const debt = Math.max(0, Number($(el, '#sl-debt').value) || 0);
+        const threshold = Math.min(10_000, Math.max(1, Number($(el, '#sl-threshold').value) || 1));
+        const bonus = Math.min(10_000, Math.max(0, Number($(el, '#sl-bonus').value) || 0));
+        const hf = debt ? collateral * price * threshold / 10_000 / debt : Infinity;
+        const liquidationPrice = collateral && threshold ? debt * 10_000 / (collateral * threshold) : Infinity;
+        const repay = debt * 0.5;
+        const seize = price ? Math.min(collateral, repay * (10_000 + bonus) / 10_000 / price) : collateral;
+        const status = hf < 1 ? '<span class="bad">LIQUIDATABLE</span>' : '<span class="good">ABOVE LIQUIDATION THRESHOLD</span>';
+        $(el, '#sl-log').innerHTML =
+          `POSITION\n  collateral value    $${num(collateral * price, 2)}\n  debt value          $${num(debt, 2)}\n  health factor       ${num(hf, 3)}\n  liquidation price   $${num(liquidationPrice, 2)} per SUI\n\n${status}\n\nPARTIAL LIQUIDATION (50% close factor)\n  liquidator repays   $${num(repay, 2)} USDC\n  collateral seized   ${num(seize, 4)} SUI\n  bonus value         $${num(Math.max(0, seize * price - repay), 2)}\n\n<span class="dim">This calculation assumes a fresh $1 USDC price and a trusted SUI oracle. A real market accrues debt through a global index and caps the repayment and seizure based on current position state.</span>`;
+      }
+      $$(el, 'input').forEach(i => i.oninput = run); $(el, '#sl-run').onclick = run; run();
+    });
+
+  /* ---------- node operations ---------- */
+  reg('nodeops', 'Node capacity planner',
+    'Estimate retained chain data, snapshot space, logs and a 30% operating margin before selecting a disk.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Current chain data (GB)</label><input id="no-current" type="number" value="850" min="0" step="10"></div>
+          <div class="field"><label>Daily growth (GB)</label><input id="no-growth" type="number" value="8" min="0" step="0.5"></div>
+          <div class="field"><label>Retention (days)</label><input id="no-days" type="number" value="90" min="1" step="1"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Snapshot workspace (GB)</label><input id="no-snapshot" type="number" value="400" min="0" step="10"></div>
+          <div class="field"><label>Log budget (GB)</label><input id="no-logs" type="number" value="50" min="0" step="5"></div>
+          <div class="field shrink"><button class="btn primary" id="no-run">Plan capacity</button></div>
+        </div><div class="out" id="no-log"></div>`;
+      function v(id) { return Math.max(0, Number($(el, id).value) || 0); }
+      function run() {
+        const current = v('#no-current'), growth = v('#no-growth'), days = v('#no-days');
+        const snapshot = v('#no-snapshot'), logs = v('#no-logs');
+        const base = current + growth * days + snapshot + logs;
+        const headroom = base * 0.30, total = base + headroom;
+        $(el, '#no-log').innerHTML = `STORAGE PLAN\n  current + retained growth  ${num(current + growth * days, 1)} GB\n  snapshot workspace         ${num(snapshot, 1)} GB\n  log budget                 ${num(logs, 1)} GB\n  30% headroom               ${num(headroom, 1)} GB\n\nRECOMMENDED MINIMUM\n  ${num(total, 1)} GB  (${num(total / 1024, 2)} TB)\n\n<span class="dim">This is a capacity floor. Validate IOPS, restore duration, pruning behaviour and peak snapshot overlap on the actual client and chain.</span>`;
+      }
+      $$(el, 'input').forEach(i => i.oninput = run); $(el, '#no-run').onclick = run; run();
+    });
+
+  /* ---------- validator operations ---------- */
+  reg('valops', 'Validator failover safety gate',
+    'A standby may start only after the primary is fenced from both the network and consensus-signing authority.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Primary process</label><select id="vo-process"><option value="active">Still active</option><option value="stopped">Confirmed stopped</option><option value="unknown">Unknown / timed out</option></select></div>
+          <div class="field"><label>Primary network</label><select id="vo-network"><option value="open">Still reachable</option><option value="fenced">Fenced / powered off</option></select></div>
+          <div class="field"><label>Consensus-key access</label><select id="vo-key"><option value="available">Primary can still access it</option><option value="revoked">Revoked or remote signer fenced</option></select></div>
+        </div><div class="out" id="vo-log"></div>`;
+      function run() {
+        const process = $(el, '#vo-process').value, network = $(el, '#vo-network').value, key = $(el, '#vo-key').value;
+        const safe = process === 'stopped' && network === 'fenced' && key === 'revoked';
+        const missing = [];
+        if (process !== 'stopped') missing.push('primary process is not confirmed stopped');
+        if (network !== 'fenced') missing.push('primary host is not fenced from the network');
+        if (key !== 'revoked') missing.push('primary may still reach consensus-signing authority');
+        $(el, '#vo-log').innerHTML = safe
+          ? '<span class="good">STANDBY MAY START</span>\n\nVerify chain ID, validator public key and latest signer state before enabling production signing.\n\n<span class="dim">Record fence evidence and time in the incident timeline.</span>'
+          : `<span class="bad">REFUSE FAILOVER</span>\n\n${missing.map(x => '  • ' + x).join('\n')}\n\n<span class="dim">A timeout is evidence of trouble, not evidence that the old validator cannot still sign.</span>`;
+      }
+      $$(el, 'select').forEach(i => i.onchange = run); run();
+    });
+
+  /* ---------- observability ---------- */
+  reg('opsobserve', 'Validator alert triage',
+    'Change current telemetry and see which conditions need a page before they become a consensus or capacity outage.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Block lag</label><input id="oo-lag" type="number" value="0" min="0" step="1"></div>
+          <div class="field"><label>Missed votes remaining</label><input id="oo-votes" type="number" value="50" min="0" step="1"></div>
+          <div class="field"><label>Disk fills in (hours)</label><input id="oo-disk" type="number" value="120" min="0" step="1"></div>
+        </div><div class="out" id="oo-log"></div>`;
+      function run() {
+        const lag = Math.max(0, Number($(el, '#oo-lag').value) || 0);
+        const votes = Math.max(0, Number($(el, '#oo-votes').value) || 0);
+        const disk = Math.max(0, Number($(el, '#oo-disk').value) || 0);
+        const alerts = [];
+        if (lag > 3) alerts.push('<span class="bad">PAGE</span>  Validator falling behind — inspect peers, consensus process and disk I/O.');
+        if (votes < 10) alerts.push('<span class="bad">PAGE</span>  Missed-vote budget low — investigate signer and network before jail threshold.');
+        if (disk < 24) alerts.push('<span class="hash">TICKET</span>  Disk exhaustion forecast under 24 hours — expand storage or prune safely.');
+        $(el, '#oo-log').innerHTML = alerts.length
+          ? alerts.join('\n\n') + '\n\n<span class="dim">Each alert should name a first decision and link to a tested runbook.</span>'
+          : '<span class="good">NO ACTIVE OPERATIONAL ALERTS</span>\n\nContinue to observe trends: healthy current values do not prove future capacity or peer health.';
+      }
+      $$(el, 'input').forEach(i => i.oninput = run); run();
+    });
+
+  /* ---------- release automation ---------- */
+  reg('opsrelease', 'IaC release-plan review',
+    'Review a node release plan for pinned artifacts, isolated secrets, restore proof and a bounded rollout path.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row"><label class="opt"><input id="or-pin" type="checkbox" checked><span>Image or binary digest is pinned and verified</span></label><label class="opt"><input id="or-secret" type="checkbox" checked><span>Consensus key stays outside infrastructure state</span></label></div>
+        <div class="row"><label class="opt"><input id="or-restore" type="checkbox"><span>Isolated restore met the recovery-time objective</span></label><label class="opt"><input id="or-canary" type="checkbox" checked><span>Canary and rollback decision are documented</span></label></div>
+        <div class="out" id="or-log"></div>`;
+      function run() {
+        const checks = [['#or-pin', 'release artifact is not pinned and verified'], ['#or-secret', 'signing authority is not separated from infrastructure state'], ['#or-restore', 'backup recovery has not been proven by an isolated restore'], ['#or-canary', 'canary rollout or rollback conditions are missing']];
+        const missing = checks.filter(c => !$(el, c[0]).checked).map(c => c[1]);
+        $(el, '#or-log').innerHTML = missing.length
+          ? `<span class="bad">DO NOT PROMOTE</span>\n\n${missing.map(x => '  • ' + x).join('\n')}\n\n<span class="dim">Fix the plan first; operational pressure is when untested assumptions become outages.</span>`
+          : '<span class="good">PLAN HAS THE REQUIRED SAFETY CONTROLS</span>\n\nProceed through the canary with monitoring and stop at the documented abort condition rather than improvising mid-upgrade.';
+      }
+      $$(el, 'input').forEach(i => i.onchange = run); run();
+    });
+
+  /* ---------- advanced protocol systems ---------- */
+  reg('mevflow', 'Slippage and sandwich room', 'Compare quoted output, signed tolerance and a simulated adverse move before execution.', function (el) {
+    el.innerHTML = '<div class="row"><div class="field"><label>Quoted output</label><input id="mf-q" type="number" value="1000" min="0"></div><div class="field"><label>Slippage (bps)</label><input id="mf-s" type="number" value="50" min="0" max="10000"></div><div class="field"><label>Adverse move (%)</label><input id="mf-m" type="number" value="0.3" min="0" step="0.1"></div></div><div class="out" id="mf-o"></div>';
+    function run() { const q=Math.max(0,+$(el,'#mf-q').value||0), s=Math.min(10000,Math.max(0,+$(el,'#mf-s').value||0)), m=Math.max(0,+$(el,'#mf-m').value||0)/100, min=q*(10000-s)/10000, actual=q*(1-m); $(el,'#mf-o').innerHTML=`SIGNED minOut  ${num(min,2)}\nACTUAL OUTPUT  ${num(actual,2)}\n\n${actual>=min?'<span class="good">EXECUTES</span>':'<span class="bad">REVERTS</span>'}\n\n<span class="dim">Tolerance above the normal price move is room an adversarial ordering strategy can potentially capture.</span>`; } $$(el,'input').forEach(i=>i.oninput=run); run();
+  });
+  reg('xchain', 'Message domain and replay guard', 'Deliver a message, replay it, or change its claimed source domain.', function (el) {
+    el.innerHTML='<div class="row"><div class="field"><label>Source chain</label><input id="xc-chain" type="number" value="1"></div><div class="field"><label>Nonce</label><input id="xc-nonce" type="number" value="7"></div><div class="field"><label><input id="xc-replay" type="checkbox"> replay this message</label></div><div class="field"><label><input id="xc-wrong" type="checkbox"> wrong source domain</label></div></div><div class="out" id="xc-o"></div>';
+    const seen=new Set(); function run(){const c=+$(el,'#xc-chain').value||0,n=+$(el,'#xc-nonce').value||0,id=c+':remote-app:'+n; let r; if($(el,'#xc-wrong').checked)r='<span class="bad">REJECT: wrong source domain</span>'; else if($(el,'#xc-replay').checked||seen.has(id))r='<span class="bad">REJECT: replayed message ID</span>'; else {seen.add(id);r='<span class="good">ACCEPT: mark ID consumed, then handle payload</span>';} $(el,'#xc-o').innerHTML=`MESSAGE ID  ${id}\n${r}\n\n<span class="dim">A real receiver also binds destination, sender, payload hash and verifier result.</span>`;} $$(el,'input').forEach(i=>i.oninput=run);run();
+  });
+  reg('smartwallet', 'Session-key policy checker', 'Try a session-key call against target, value and expiry restrictions.', function (el) {
+    el.innerHTML='<div class="row"><div class="field"><label>Target</label><select id="sw-t"><option value="game">approved game</option><option value="dex">unapproved DEX</option></select></div><div class="field"><label>Value (ETH)</label><input id="sw-v" type="number" value="0.01" min="0" step="0.01"></div><div class="field"><label><input id="sw-exp" type="checkbox"> session expired</label></div></div><div class="out" id="sw-o"></div>';
+    function run(){const t=$(el,'#sw-t').value,v=Math.max(0,+$(el,'#sw-v').value||0),e=$(el,'#sw-exp').checked; const ok=t==='game'&&v<=0.05&&!e; $(el,'#sw-o').innerHTML=`POLICY\n  target: game only\n  value cap: 0.05 ETH\n  expiry: active\n\n${ok?'<span class="good">USER OPERATION VALID</span>':'<span class="bad">USER OPERATION REJECTED</span>'}\n\n<span class="dim">Constrain every delegated key on chain; revocation must take effect immediately.</span>`;} $$(el,'input,select').forEach(i=>i.oninput=run);run();
+  });
+  reg('cryptops', 'Custody availability comparison', 'Compare a single key, multisig and threshold workflow when one participant is offline.', function (el) {
+    el.innerHTML='<div class="row"><div class="field"><label>Scheme</label><select id="co-s"><option value="single">single key</option><option value="multi">2-of-3 multisig</option><option value="threshold">2-of-3 threshold</option></select></div><div class="field"><label>Available participants</label><input id="co-a" type="number" value="2" min="0" max="3"></div></div><div class="out" id="co-o"></div>';
+    function run(){const s=$(el,'#co-s').value,a=Math.max(0,+$(el,'#co-a').value||0),need=s==='single'?1:2,ok=a>=need; $(el,'#co-o').innerHTML=`${s.toUpperCase()}\n  available  ${a}\n  required   ${need}\n\n${ok?'<span class="good">CAN AUTHORIZE</span>':'<span class="bad">CANNOT AUTHORIZE</span>'}\n\n<span class="dim">Threshold custody can reduce single-device compromise while adding participant and recovery availability requirements.</span>`;} $$(el,'input,select').forEach(i=>i.oninput=run);run();
+  });
+  reg('indexer', 'Reorg-safe event ingestion', 'Ingest an event, then replace its block with a reorg and inspect canonical status.', function (el) {
+    el.innerHTML='<div class="row"><div class="field"><label>Block height</label><input id="ix-h" type="number" value="100" min="0"></div><div class="field"><label><input id="ix-r" type="checkbox"> simulate reorg</label></div></div><div class="out" id="ix-o"></div>';
+    function run(){const h=+$(el,'#ix-h').value||0,r=$(el,'#ix-r').checked; $(el,'#ix-o').innerHTML=`EVENT KEY  chain:1 tx:0xabc log:0\nBLOCK      ${h} / ${r?'0xnew':'0xold'}\nCANONICAL  ${r?'<span class="bad">old branch = false</span>\n          <span class="good">replacement event = true</span>':'<span class="good">true</span>'}\n\n<span class="dim">Keep hash and parent-hash provenance. Retries use a stable event key; product views read canonical records only.</span>`;} $$(el,'input').forEach(i=>i.oninput=run);run();
+  });
+
+  /* ---------- NFT metadata pointer chain ---------- */
+  reg('nftmeta', 'Metadata pointer chain',
+    'Pick a storage strategy, then attack it: swap the image, repoint the base URI, or let the host disappear. Watch which failures the chain can still detect.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Storage strategy</label><select id="nm-mode">
+            <option value="http">HTTP URL</option>
+            <option value="ipfs">Content-addressed (IPFS CID)</option>
+            <option value="onchain">Fully on chain (data: URI)</option>
+          </select></div>
+          <div class="field shrink"><label><input id="nm-swap" type="checkbox"> creator swaps the image file</label></div>
+          <div class="field shrink"><label><input id="nm-frozen" type="checkbox" checked> base URI frozen</label></div>
+          <div class="field shrink"><label><input id="nm-repoint" type="checkbox"> owner calls setBaseURI</label></div>
+          <div class="field shrink"><label><input id="nm-down" type="checkbox"> host / pin disappears</label></div>
+        </div>
+        <div class="out" id="nm-log"></div>`;
+
+      const CID_A = 'bafybeib4o7…9c41e';   // hash of the original bytes
+      const CID_B = 'bafybeif2m3…7a3d2';   // hash of the swapped bytes
+
+      function run() {
+        const mode = $(el, '#nm-mode').value;
+        const swap = $(el, '#nm-swap').checked;
+        const frozen = $(el, '#nm-frozen').checked;
+        const repoint = $(el, '#nm-repoint').checked && !frozen;
+        const down = $(el, '#nm-down').checked;
+        const blocked = $(el, '#nm-repoint').checked && frozen;
+
+        const hops = [];
+        let served, detect, note;
+
+        hops.push('  ownerOf(42)          <span class="good">0xA11ce  — consensus protects this</span>');
+
+        if (mode === 'onchain') {
+          hops.push('  tokenURI(42)         data:application/json;base64,eyJ…');
+          hops.push('  metadata             <span class="good">decoded from contract storage</span>');
+          hops.push('  image                <span class="good">SVG built inside the contract</span>');
+          served = swap
+            ? '<span class="good">ORIGINAL ARTWORK.</span> There is no file to swap. Changing the bytes means changing contract code, which is a visible on-chain event, not a quiet upload.'
+            : '<span class="good">ORIGINAL ARTWORK.</span> No host, no gateway, no pin. The artwork exists wherever the chain state exists.';
+          detect = 'Nothing off chain to trust.';
+          note = 'Cost: every byte was paid for at mint, and the art has to be renderable in Solidity.';
+        } else if (mode === 'ipfs') {
+          const cid = repoint ? CID_B : CID_A;
+          hops.push('  tokenURI(42)         ipfs://' + cid + '/42.json' +
+            (repoint ? ' <span class="bad">← repointed by the owner</span>' : ''));
+          hops.push(down
+            ? '  gateway              <span class="bad">timeout — nobody is pinning this CID</span>'
+            : '  gateway              200 OK (any gateway serves the same bytes)');
+          hops.push(down ? '  image                <span class="bad">unavailable</span>'
+            : '  image                ipfs://…/42.png');
+          if (down) {
+            served = '<span class="bad">NOTHING SERVED.</span> The CID still proves exactly which bytes belong to token 42 — but proof is not availability. Somebody has to keep paying to pin it.';
+            detect = 'A substitution would be detectable; a disappearance is not preventable by hashing.';
+          } else if (repoint) {
+            served = '<span class="bad">DIFFERENT ARTWORK.</span> The bytes were not tampered with — the pointer was. Content addressing protects the file, not the string in the contract.';
+            detect = 'Detectable on chain: the tokenURI changed, and that is a state change anyone can diff.';
+          } else if (swap) {
+            served = '<span class="good">ORIGINAL ARTWORK.</span> The swapped file hashes to ' + CID_B + ', so the old pointer cannot resolve to it. The substitution simply does not reach holders.';
+            detect = 'Tamper-evident by construction.';
+          } else {
+            served = '<span class="good">ORIGINAL ARTWORK.</span>';
+            detect = 'Tamper-evident by construction.';
+          }
+          note = blocked
+            ? 'setBaseURI reverted with MetadataFrozen — the one-way switch is why the pointer can be trusted.'
+            : (frozen ? 'Base URI is frozen, so the pointer itself can never move again.'
+              : 'Base URI is NOT frozen. The owner can move every token’s pointer at any time.');
+        } else {
+          hops.push('  tokenURI(42)         https://api.example.com/meta/42' +
+            (repoint ? ' <span class="bad">← repointed by the owner</span>' : ''));
+          hops.push(down
+            ? '  api.example.com      <span class="bad">404 / domain expired</span>'
+            : '  api.example.com      200 OK  ' + (swap ? '<span class="bad">(file replaced this morning)</span>' : ''));
+          hops.push(down ? '  image                <span class="bad">unavailable</span>'
+            : '  image                ' + (swap ? '<span class="bad">a grey placeholder</span>' : 'the picture you bought'));
+          served = down
+            ? '<span class="bad">NOTHING SERVED.</span> One expired domain and the collection is blank everywhere at once.'
+            : (swap || repoint)
+              ? '<span class="bad">DIFFERENT ARTWORK.</span> No transaction, no event, no trace. The chain records that you own token 42 and nothing about what it looks like.'
+              : '<span class="good">ORIGINAL ARTWORK — for now.</span> Whoever controls that server controls what every holder sees.';
+          detect = swap && !repoint
+            ? 'Undetectable on chain. Only somebody who archived the old bytes can prove the change.'
+            : repoint ? 'The repoint is on chain, so at least the change is visible.'
+              : 'Nothing is pinned to a hash, so a future change would leave no on-chain trace.';
+          note = blocked
+            ? 'setBaseURI reverted with MetadataFrozen — but a frozen pointer to a mutable host still guarantees nothing about the bytes.'
+            : 'Mutable metadata is the right choice for an item that is meant to change. It is dishonest for art sold as permanent.';
+        }
+
+        $(el, '#nm-log').innerHTML =
+          'RESOLUTION CHAIN\n' + hops.join('\n') + '\n\n' +
+          'WHAT THE HOLDER SEES\n  ' + served + '\n\n' +
+          'DETECTABILITY\n  <span class="dim">' + detect + '</span>\n\n' +
+          '<span class="dim">' + note + '</span>';
+      }
+      $$(el, 'input, select').forEach(i => i.oninput = run); run();
+    });
+
+  /* ---------- GameFi faucet / sink model ---------- */
+  reg('gamefi', 'Faucets, sinks and 180 days',
+    'A deliberately small economy model. Emissions grow supply, burns shrink it, and players decide whether to stay based on what a day of play is worth in dollars.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Emitted / player / day</label><input id="gf-earn" type="number" value="60" min="0" step="5"></div>
+          <div class="field"><label>Spent / player / day</label><input id="gf-spend" type="number" value="25" min="0" step="5"></div>
+          <div class="field"><label>Share of spend burned</label><input id="gf-burn" type="range" min="0" max="100" value="40"> <span class="mono" id="gf-burnv">40%</span></div>
+          <div class="field"><label>Wage floor (USD/day)</label><input id="gf-wage" type="number" value="6" min="0.5" step="0.5"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Players at day 0</label><input id="gf-players" type="number" value="50000" min="100" step="1000"></div>
+          <div class="field"><label>Circulating supply</label><input id="gf-supply" type="number" value="200000000" min="1000" step="1000000"></div>
+          <div class="field"><label>Token price (USD)</label><input id="gf-price" type="number" value="0.25" min="0.0001" step="0.01"></div>
+        </div>
+        <div class="out" id="gf-log"></div>
+        <div class="bars" id="gf-bars" style="margin-top:12px"></div>`;
+
+      function sim(p, days) {
+        let players = p.players, supply = p.supply, price = p.price;
+        const k = (price * supply) / players;          // toy: price tracks players per token
+        const out = [];
+        for (let day = 1; day <= days; day++) {
+          const emitted = players * p.earn;
+          const burned = players * p.spend * p.burn;
+          supply += emitted - burned;
+          const dailyUsd = p.earn * price;
+          // players judge the game in dollars per day, not in tokens
+          const growth = Math.max(-0.12, Math.min(0.12, 0.25 * (dailyUsd / p.wage - 1)));
+          players = Math.max(0, players * (1 + growth));
+          price = players > 0 && supply > 0 ? (k * players) / supply : 0;
+          out.push({ day: day, players: players, supply: supply, price: price, dailyUsd: p.earn * price });
+        }
+        return out;
+      }
+
+      function run() {
+        const p = {
+          earn: Math.max(0, Number($(el, '#gf-earn').value) || 0),
+          spend: Math.max(0, Number($(el, '#gf-spend').value) || 0),
+          burn: Number($(el, '#gf-burn').value) / 100,
+          wage: Math.max(0.5, Number($(el, '#gf-wage').value) || 0.5),
+          players: Math.max(100, Number($(el, '#gf-players').value) || 100),
+          supply: Math.max(1000, Number($(el, '#gf-supply').value) || 1000),
+          price: Math.max(0.0001, Number($(el, '#gf-price').value) || 0.0001)
+        };
+        $(el, '#gf-burnv').textContent = pct(p.burn, 0);
+
+        const h = sim(p, 180);
+        const coverage = p.earn > 0 ? (p.spend * p.burn) / p.earn : Infinity;
+        const marks = [0, 29, 59, 89, 119, 149, 179];
+        const rows = marks.map(i => {
+          const d = h[i];
+          return '  day ' + String(d.day).padStart(3) + '   ' +
+            num(d.players, 0).padStart(11) + ' players   ' +
+            num(d.supply / 1e6, 1).padStart(8) + 'M supply   $' +
+            d.price.toFixed(4).padStart(8) + '   $' + d.dailyUsd.toFixed(2).padStart(6) + '/day';
+        }).join('\n');
+
+        const last = h[h.length - 1];
+        const verdict = coverage >= 1
+          ? '<span class="good">SINK COVERAGE ' + coverage.toFixed(2) + '.</span> Burns match or beat emissions, so supply is not the thing hurting you.'
+          : '<span class="bad">SINK COVERAGE ' + coverage.toFixed(2) + '.</span> Every day emits ' +
+            num(p.earn - p.spend * p.burn, 0) + ' more tokens per player than it destroys. Demand has to grow at least that fast, forever.';
+
+        $(el, '#gf-log').innerHTML =
+          'PER PLAYER PER DAY\n  emitted   ' + num(p.earn, 0) + '\n  burned    ' + num(p.spend * p.burn, 1) +
+          '  <span class="dim">(the rest of the spend went to a treasury — still in existence)</span>\n\n' +
+          'TRAJECTORY\n' + rows + '\n\n' +
+          'AFTER 180 DAYS\n  players   ' + num(last.players, 0) + '  <span class="dim">(' + pct(last.players / p.players - 1, 0) + ')</span>' +
+          '\n  supply    ' + num(last.supply / p.supply, 2) + 'x\n  price     ' + pct(last.price / p.price - 1, 0) + '\n\n' +
+          verdict + '\n\n<span class="dim">This is a toy. The price rule is one line and no model predicts a market. What it does show honestly is the direction of the loop: earnings set growth, growth sets demand, demand sets earnings.</span>';
+
+        const maxP = Math.max.apply(null, h.map(x => x.price));
+        $(el, '#gf-bars').innerHTML = marks.map(i => {
+          const d = h[i];
+          return '<div class="barrow"><span>day ' + d.day + '</span>' +
+            '<span class="track"><i style="width:' + (maxP > 0 ? (d.price / maxP * 100).toFixed(1) : 0) + '%"></i></span>' +
+            '<span>$' + d.price.toFixed(4) + '</span></div>';
+        }).join('') + '<div class="dim" style="font-size:12px;margin-top:6px">Token price over 180 days. Raise the burn share until this stops falling, then ask whether players would actually pay that sink.</div>';
+      }
+      $$(el, 'input').forEach(i => i.oninput = run); run();
+    });
+
+  /* ---------- game randomness under attack ---------- */
+  reg('gameassets', 'Loot box randomness under attack',
+    '1000 loot boxes, a 5% legendary rate, and a player who is allowed to undo outcomes they dislike. Same draws every run, so you can compare sources fairly.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Randomness source</label><select id="ga-src">
+            <option value="naive">block.timestamp in one transaction</option>
+            <option value="commit">commit-reveal, two transactions</option>
+            <option value="vrf">VRF request + callback</option>
+          </select></div>
+          <div class="field"><label>Player</label><select id="ga-who">
+            <option value="honest">honest wallet</option>
+            <option value="attacker">contract that reverts on a bad roll</option>
+          </select></div>
+          <div class="field"><label>Box price (ETH)</label><input id="ga-price" type="number" value="0.01" min="0" step="0.005"></div>
+          <div class="field"><label>Gas per attempt (ETH)</label><input id="ga-gas" type="number" value="0.0004" min="0" step="0.0001"></div>
+        </div>
+        <div class="out" id="ga-log"></div>
+        <div class="bars" id="ga-bars" style="margin-top:12px"></div>`;
+
+      const BOXES = 1000, RARE = 0.05;
+
+      function run() {
+        const src = $(el, '#ga-src').value;
+        const attacker = $(el, '#ga-who').value === 'attacker';
+        const price = Math.max(0, Number($(el, '#ga-price').value) || 0);
+        const gas = Math.max(0, Number($(el, '#ga-gas').value) || 0);
+        const rand = rng(1337);
+
+        let legendary = 0, attempts = 0, settled = 0, abandoned = 0;
+
+        for (let i = 0; i < BOXES; i++) {
+          if (src === 'naive' && attacker) {
+            // the roll happens inside the caller's transaction, so a losing
+            // outcome can simply be discarded and retried
+            let tries = 0, hit = false;
+            while (!hit && tries < 400) { tries++; hit = rand() < RARE; }
+            attempts += tries; settled++; if (hit) legendary++;
+          } else if (src === 'commit' && attacker) {
+            // prediction is impossible, but the reveal can be withheld
+            attempts += 1;
+            if (rand() < RARE) { settled++; legendary++; } else { abandoned++; }
+          } else {
+            attempts += 1; settled++; if (rand() < RARE) legendary++;
+          }
+        }
+
+        const rate = settled > 0 ? legendary / settled : 0;
+        const spent = BOXES * price + attempts * gas;
+        const perLegendary = legendary > 0 ? spent / legendary : Infinity;
+        const honestCost = (BOXES * price + BOXES * gas) / (BOXES * RARE);
+
+        const lines = [
+          '  boxes paid for      ' + num(BOXES, 0),
+          '  transactions sent   ' + num(attempts, 0) + (attempts > BOXES ? '  <span class="bad">(retries are free apart from gas)</span>' : ''),
+          '  outcomes settled    ' + num(settled, 0),
+          '  legendary           ' + num(legendary, 0) + '   <span class="' + (rate > RARE * 2 ? 'bad' : 'good') + '">' + pct(rate, 1) + ' of settled rolls</span>',
+          '  advertised rate     ' + pct(RARE, 1)
+        ];
+        if (abandoned) lines.push('  never revealed      ' + num(abandoned, 0) + '  <span class="bad">(stake forfeited if you designed it that way — free if you did not)</span>');
+
+        const verdicts = {
+          naive: attacker
+            ? '<span class="bad">BROKEN.</span> The attacker never had to predict anything. They called the box from a contract, checked the result, and reverted the whole transaction whenever it was not legendary — paying only gas per attempt. Your 5% became ' + pct(rate, 1) + '.'
+            : 'Honest players get the advertised odds. That tells you nothing: the source is only as safe as your least honest caller.',
+          commit: attacker
+            ? '<span class="bad">LEAKY.</span> Commit-reveal stops prediction, so every commitment was a fair 5%. It does not stop <em>withholding</em> — this player simply never revealed the ' + num(abandoned, 0) + ' bad rolls. Charge for the commitment and forfeit the stake when the reveal window closes, or losing costs nothing.'
+            : 'Fair, and it needs no oracle. Two transactions and a reveal deadline are the price.',
+          vrf: attacker
+            ? '<span class="good">HELD.</span> The result arrives in a separate transaction the player does not control, so there is nothing to revert and nothing to withhold. The attacker got ' + pct(rate, 1) + ' — the same as everyone else.'
+            : 'Fair, asynchronous, and it costs a subscription. Keep the callback cheap and let players claim separately.'
+        };
+
+        $(el, '#ga-log').innerHTML =
+          '1000 BOXES, SEED 1337\n' + lines.join('\n') + '\n\n' +
+          'ECONOMICS\n  spent               ' + spent.toFixed(3) + ' ETH\n' +
+          '  per legendary       ' + (isFinite(perLegendary) ? perLegendary.toFixed(4) + ' ETH' : '—') +
+          '   <span class="dim">(honest baseline ' + honestCost.toFixed(4) + ' ETH)</span>\n\n' +
+          verdicts[src];
+
+        const cmp = [
+          { k: 'naive, honest', v: RARE },
+          { k: 'naive, attacker', v: 1 },
+          { k: 'commit, withheld', v: 1 },
+          { k: 'VRF, either', v: RARE }
+        ];
+        $(el, '#ga-bars').innerHTML = cmp.map(c =>
+          '<div class="barrow"><span>' + c.k + '</span><span class="track"><i style="width:' +
+          (c.v * 100).toFixed(0) + '%"></i></span><span>' + pct(c.v, 0) + '</span></div>').join('') +
+          '<div class="dim" style="font-size:12px;margin-top:6px">Legendary rate an attacker can reach against each source. Only the last row costs them nothing to attack because there is nothing to attack.</div>';
+      }
+      $$(el, 'input, select').forEach(i => i.oninput = run); run();
+    });
+
+  /* =========================================================
+     MODULE 8 — STELLAR & SOROBAN
+     ========================================================= */
+
+  /* ---------- stellarquorum ---------- */
+  reg('stellarquorum', 'Quorum intersection inspector',
+    'Switch between a shared quorum core and two disconnected groups. The same number of validator keys can have very different safety and availability properties.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row"><div class="field"><label>Configuration</label><select id="sq-mode"><option value="shared">Shared 3-of-4 quorum</option><option value="split">Two disconnected 2-of-2 groups</option></select></div>
+        <div class="field shrink"><label>&nbsp;</label><label class="opt"><input id="sq-a" type="checkbox" checked><span>Validator A online</span></label></div>
+        <div class="field shrink"><label>&nbsp;</label><label class="opt"><input id="sq-b" type="checkbox" checked><span>Validator B online</span></label></div>
+        <div class="field shrink"><label>&nbsp;</label><label class="opt"><input id="sq-c" type="checkbox" checked><span>Validator C online</span></label></div>
+        <div class="field shrink"><label>&nbsp;</label><label class="opt"><input id="sq-d" type="checkbox" checked><span>Validator D online</span></label></div></div>
+        <div class="out" id="sq-out"></div><div id="sq-verdict"></div>`;
+      function run() {
+        const online = ['a', 'b', 'c', 'd'].filter(k => $(el, '#sq-' + k).checked).map(k => k.toUpperCase());
+        const split = $(el, '#sq-mode').value === 'split';
+        const possible = split
+          ? [['A', 'B'], ['C', 'D']].filter(q => q.every(x => online.includes(x)))
+          : online.length >= 3 ? [online] : [];
+        const quorums = split ? 'AB and CD are each self-sufficient quorums.' : 'Any three of A, B, C and D form a quorum.';
+        const intersection = split ? 'AB ∩ CD = ∅' : 'Every 3-of-4 quorum pair shares at least two validators.';
+        $(el, '#sq-out').innerHTML =
+          'CONFIGURATION\n  ' + quorums + '\n\nONLINE\n  ' + (online.join(', ') || 'none') +
+          '\n\nLIVE QUORUMS\n  ' + (possible.length ? possible.map(q => q.join('')).join('  ·  ') : 'none');
+        $(el, '#sq-verdict').innerHTML = split
+          ? '<div class="note danger"><span class="tag">No quorum intersection</span>' + intersection + ' Either group can externalise a different value. Both groups may be live, but the safety model is broken.</div>'
+          : '<div class="note"><span class="tag">Intersection holds</span>' + intersection + (possible.length ? ' The selected online set can make progress.' : ' Fewer than three validators are online, so liveness is lost safely rather than confirming a conflicting value.') + '</div>';
+      }
+      $$(el, 'input, select').forEach(i => i.oninput = run); run();
+    });
+
+  /* ---------- stellarmultisig ---------- */
+  reg('stellarmultisig', 'Threshold multisig transaction gate',
+    'A treasury payment needs a medium threshold of two. Toggle signer approvals, expire the envelope, or make an operation fail to see that a valid signature set is necessary but not sufficient for settlement.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row"><div class="field shrink"><label>Signer approvals (weight 1 each)</label><label class="opt"><input id="sm-a" type="checkbox" checked><span>A</span></label><label class="opt"><input id="sm-b" type="checkbox"><span>B</span></label><label class="opt"><input id="sm-c" type="checkbox"><span>C</span></label></div>
+        <div class="field"><label>Transaction time</label><select id="sm-time"><option value="valid">Before timeout</option><option value="expired">After timeout</option></select></div>
+        <div class="field"><label>Second operation</label><select id="sm-op"><option value="ok">Valid trustline update</option><option value="bad">Fails: insufficient reserve</option></select></div></div>
+        <div class="out" id="sm-out"></div>`;
+      function run() {
+        const signers = ['a', 'b', 'c'].filter(k => $(el, '#sm-' + k).checked).map(k => k.toUpperCase());
+        const weight = signers.length;
+        const timely = $(el, '#sm-time').value === 'valid';
+        const opOk = $(el, '#sm-op').value === 'ok';
+        let verdict = weight < 2 ? '<span class="bad">REJECTED: medium threshold 2 is not met.</span>'
+          : !timely ? '<span class="bad">REJECTED: transaction time bound has expired.</span>'
+          : !opOk ? '<span class="bad">REVERTED: the second operation fails, so the payment also does not apply.</span>'
+          : '<span class="good">SETTLES: both operations apply atomically.</span>';
+        $(el, '#sm-out').innerHTML = 'ENVELOPE\n  source sequence: 481\n  medium threshold: 2\n  supplied signers: ' + (signers.join(', ') || 'none') + '  → weight ' + weight + '\n  time bound: ' + (timely ? 'valid' : 'expired') + '\n  operations: payment → trustline update\n\n' + verdict;
+      }
+      $$(el, 'input, select').forEach(i => i.oninput = run); run();
+    });
+
+  /* ---------- sorobanauth ---------- */
+  reg('sorobanauth', 'Soroban authorization and TTL boundary',
+    'Choose who invokes a per-owner update, where the value lives and how long it has left. The host authorises the owner, while the application must choose a storage lifetime that matches the value.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row"><div class="field"><label>Invoker</label><select id="ss-caller"><option value="owner">Owner authorises increment</option><option value="attacker">Attacker passes owner address</option></select></div>
+        <div class="field"><label>Storage class</label><select id="ss-store"><option value="persistent">Persistent: user counter</option><option value="temporary">Temporary: replay nonce</option></select></div>
+        <div class="field"><label>TTL remaining (ledgers)</label><input id="ss-ttl" type="number" min="0" step="1" value="100"></div>
+        <div class="field shrink"><label>&nbsp;</label><label class="opt"><input id="ss-extend" type="checkbox"><span>Extend TTL now</span></label></div></div>
+        <div class="out" id="ss-out"></div>`;
+      function run() {
+        const authorised = $(el, '#ss-caller').value === 'owner';
+        const persistent = $(el, '#ss-store').value === 'persistent';
+        const ttl = Math.max(0, Number($(el, '#ss-ttl').value) || 0);
+        const extend = $(el, '#ss-extend').checked;
+        const finalTtl = extend ? Math.max(ttl, 1000) : ttl;
+        const auth = authorised ? '<span class="good">AUTH OK:</span> owner.require_auth() is satisfied.' : '<span class="bad">AUTH FAIL:</span> an address argument is not a signature; require_auth() rejects this invocation.';
+        const life = finalTtl === 0 ? '<span class="bad">EXPIRED:</span> the entry is no longer readable.'
+          : persistent && finalTtl < 100 ? '<span class="bad">DURABLE-STATE RISK:</span> extend this user value before it expires.'
+          : persistent ? '<span class="good">DURABLE POLICY:</span> persistent storage has a planned TTL horizon.'
+          : '<span class="good">TEMPORARY POLICY:</span> expiry is acceptable for a bounded replay nonce.';
+        $(el, '#ss-out').innerHTML = 'CONTRACT INVOCATION\n  key: Count(owner)\n  storage: ' + (persistent ? 'persistent user state' : 'temporary nonce') + '\n  TTL after this call: ' + finalTtl + ' ledgers\n\n' + auth + '\n' + life;
+      }
+      $$(el, 'input, select').forEach(i => i.oninput = run); run();
+    });
+
+  /* ---------- stellarassets ---------- */
+  reg('stellarassets', 'Trustlines, reserves and atomic path payments',
+    'Give a recipient a USD trustline, reserve the XLM needed for its ledger entry, then choose strict-receive or strict-send. The route is deliberately small, but its limits and all-or-nothing result behave like a real Stellar path payment.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Recipient XLM balance</label><input id="sa-xlm" type="number" min="0" step="0.1" value="5"></div>
+          <div class="field"><label>Existing subentries</label><input id="sa-entries" type="number" min="0" step="1" value="2"></div>
+          <div class="field"><label>Base reserve (XLM)</label><input id="sa-reserve" type="number" min="0" step="0.01" value="0.5"></div>
+          <div class="field shrink"><label>&nbsp;</label><label class="opt"><input id="sa-trust" type="checkbox" checked><span>Add USD:GISSUER trustline</span></label></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div class="field"><label>Payment mode</label><select id="sa-mode"><option value="receive">Strict receive</option><option value="send">Strict send</option></select></div>
+          <div class="field"><label id="sa-amount-label">USD recipient must get</label><input id="sa-amount" type="number" min="0" step="0.1" value="50"></div>
+          <div class="field"><label id="sa-limit-label">Maximum XLM to spend</label><input id="sa-limit" type="number" min="0" step="0.1" value="55"></div>
+        </div>
+        <div class="out" id="sa-reserve-out"></div>
+        <div id="sa-route"></div>
+        <div class="out" id="sa-result"></div>`;
+
+      function n(sel) { return Math.max(0, Number($(el, sel).value) || 0); }
+      function fixed(v) { return num(v, 4); }
+      function run() {
+        const xlm = n('#sa-xlm');
+        const existing = Math.floor(n('#sa-entries'));
+        const reserve = n('#sa-reserve');
+        const addTrust = $(el, '#sa-trust').checked;
+        const entriesAfter = existing + (addTrust ? 1 : 0);
+        const minBefore = (2 + existing) * reserve;
+        const minAfter = (2 + entriesAfter) * reserve;
+        const availableAfter = xlm - minAfter;
+        const reserveOk = xlm >= minAfter;
+        const mode = $(el, '#sa-mode').value;
+        const amount = n('#sa-amount');
+        const limit = n('#sa-limit');
+        const rate = 0.96; // USD received per XLM: XLM -> EUR -> USD
+        const needXlm = amount / rate;
+        const getUsd = amount * rate;
+
+        $(el, '#sa-amount-label').textContent = mode === 'receive' ? 'USD recipient must get' : 'Exact XLM to spend';
+        $(el, '#sa-limit-label').textContent = mode === 'receive' ? 'Maximum XLM to spend' : 'Minimum USD to receive';
+        $(el, '#sa-reserve-out').innerHTML =
+          'RESERVE CHECK\n' +
+          '  before: (' + (2 + existing) + ' entries × ' + fixed(reserve) + ') = ' + fixed(minBefore) + ' XLM minimum\n' +
+          '  after:  (' + (2 + entriesAfter) + ' entries × ' + fixed(reserve) + ') = ' + fixed(minAfter) + ' XLM minimum\n' +
+          '  available after entry change: ' + fixed(availableAfter) + ' XLM  ' +
+          (reserveOk ? '<span class="good">RESERVE HELD</span>' : '<span class="bad">INSUFFICIENT RESERVE</span>');
+
+        $(el, '#sa-route').innerHTML = '<div class="chain-flow">' +
+          '<div class="chain-block"><b>XLM</b><span>sender asset</span></div>' +
+          '<div class="chain-arrow">→</div><div class="chain-block"><b>EUR</b><span>offer: 0.80 EUR/XLM</span></div>' +
+          '<div class="chain-arrow">→</div><div class="chain-block"><b>USD:GISSUER</b><span>offer: 1.20 USD/EUR</span></div>' +
+          '</div><p class="dim" style="margin:8px 0 12px">Route rate: 1 XLM → 0.80 EUR → 0.96 USD. In a real transaction, offers may change before the ledger closes.</p>';
+
+        let result;
+        if (!addTrust) {
+          result = '<span class="bad">FAILED: destination has no trustline for USD:GISSUER.</span> It has not opted in to this credit asset.';
+        } else if (!reserveOk) {
+          result = '<span class="bad">FAILED: adding the trustline would violate the XLM reserve.</span> Fund the account or remove an unused subentry first.';
+        } else if (mode === 'receive') {
+          result = needXlm <= limit
+            ? '<span class="good">SETTLES ATOMICALLY.</span> Spend ' + fixed(needXlm) + ' XLM and deliver exactly ' + fixed(amount) + ' USD. ' + fixed(limit - needXlm) + ' XLM of sendMax remains unused.'
+            : '<span class="bad">SAFE FAILURE.</span> Delivering ' + fixed(amount) + ' USD needs ' + fixed(needXlm) + ' XLM, above sendMax ' + fixed(limit) + '. No offer is consumed.';
+        } else {
+          result = getUsd >= limit
+            ? '<span class="good">SETTLES ATOMICALLY.</span> Spend exactly ' + fixed(amount) + ' XLM and receive ' + fixed(getUsd) + ' USD, above destMin ' + fixed(limit) + '.'
+            : '<span class="bad">SAFE FAILURE.</span> ' + fixed(amount) + ' XLM would yield only ' + fixed(getUsd) + ' USD, below destMin ' + fixed(limit) + '. No offer is consumed.';
+        }
+        $(el, '#sa-result').innerHTML = 'PATH PAYMENT\n  ' + result;
+      }
+      $$(el, 'input, select').forEach(i => i.oninput = run);
+      run();
+    });
+
   /* ---------- export ---------- */
   global.LABS = LABS;
 })(window);

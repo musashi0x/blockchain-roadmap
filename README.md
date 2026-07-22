@@ -1,6 +1,6 @@
 # Blockchain Roadmap
 
-A complete, self-contained blockchain learning course: **34 lessons across 7 modules**, one lesson per
+A complete, self-contained blockchain learning course: **52 lessons across 11 modules**, one lesson per
 session, each with a line diagram, worked code examples and a live lab that runs in the page.
 
 Open `index.html` in a browser. That is the whole install.
@@ -20,7 +20,11 @@ your own browser's `localStorage` and never leaves the machine.
 | 4 | Tooling & dApps | 4 | Foundry and Hardhat, fuzz and invariant testing, viem frontends, deploy/verify/index |
 | 5 | Security & Gas | 3 | reentrancy and the classic bug families, oracles/MEV/signatures, gas and upgradeability |
 | 6 | DeFi, Scaling & Capstone | 4 | AMMs, lending and liquidation, rollups and bridges, a ZK sealed-bid auction capstone |
-| 7 | Sui & Move | 8 | object ownership, Move, PTBs, shared dApps, Kiosk policies, sponsorship, walletless auth and DeepBook |
+| 7 | Sui & Move | 10 | object ownership, Move, PTBs, shared dApps, Kiosk policies, sponsorship, walletless auth, DeepBook, AMMs and lending |
+| 8 | Stellar & Soroban | 4 | assets and anchors, SCP quorum slices, atomic multisig transactions, Soroban authorization and storage |
+| 9 | NFTs & GameFi | 3 | metadata, marketplaces, royalties, game economies, assets and randomness |
+| 10 | DevOps & Validator Operations | 4 | node capacity, validator safety, observability, releases and recovery |
+| 11 | Advanced Protocol Systems | 5 | MEV, cross-chain messaging, smart wallets, production cryptography and reorg-safe indexing |
 
 Every lesson contains:
 
@@ -28,12 +32,12 @@ Every lesson contains:
 - **explanation** — the mechanics, including the failure modes
 - **a line diagram** — the same mechanics as a picture; it draws itself when you reach it
 - **worked code** — Move, Solidity, TypeScript, shell, all copyable
-- **a live lab** — 34 of them, listed below
+- **a live lab** — 52 of them, listed below
 - **a quiz** — with an explanation on every answer, right or wrong
 - **exercises** — the part that needs a keyboard
 - **resources** — specs, docs and primary sources
 
-Roughly 39 hours of guided material, plus the exercises.
+Roughly 63 hours of guided material, plus the exercises.
 
 ## The labs
 
@@ -75,6 +79,24 @@ These are not animations. They compute the real thing.
 | 32 | `suisponsor` | user intent and gas-station policy checks in a sponsored transaction |
 | 33 | `suiauth` | compare wallets, zkLogin and passkeys through their custody and recovery boundaries |
 | 34 | `suibook` | sweep a limit-order book while respecting the signed limit price |
+| 35 | `suiamm` | quote a shared-pool swap, then test a signed slippage limit after earlier execution |
+| 36 | `suilend` | calculate health factor, liquidation price and partial-liquidation incentive |
+| 37 | `stellarassets` | add a trustline, check XLM reserve, then compare strict-send and strict-receive path-payment limits |
+| 38 | `stellarquorum` | compare intersecting and disconnected quorum configurations under validator failures |
+| 39 | `stellarmultisig` | meet a threshold, bound a transaction in time and observe atomic rollback on a failed operation |
+| 40 | `sorobanauth` | test explicit authorization and choose a TTL policy for durable or temporary contract state |
+| 41 | `nftmeta` | compare metadata storage choices and inspect the pointer chain behind an NFT |
+| 42 | `gamefi` | size faucets and sinks, then watch a reward economy’s supply and price feedback loop |
+| 43 | `gameassets` | compare game-asset custody and randomness sources against a reverting attacker |
+| 44 | `nodeops` | size node storage and map public, private and validator network boundaries |
+| 45 | `valops` | test safe validator failover and key-separation decisions |
+| 46 | `opsobserve` | turn node signals into useful alert and incident decisions |
+| 47 | `opsrelease` | evaluate a safe release, backup and restore plan |
+| 48 | `mevflow` | compare a quoted swap, signed slippage tolerance and an adverse ordering move |
+| 49 | `xchain` | test source-domain verification and single-use message consumption |
+| 50 | `smartwallet` | check a session-key call against target, value and expiry policy bounds |
+| 51 | `cryptops` | compare single-key, multisig and threshold-custody availability under participant failure |
+| 52 | `indexer` | ingest a chain event, then handle a reorg by updating canonical status |
 
 ## Running it
 
@@ -112,13 +134,13 @@ css/style.css           layout and components; light and dark via [data-theme]
 css/anime.css           the anime skin — palette, glow, brackets, diagram styling
 js/lib/crypto-lite.js   SHA-256, Keccak-256, secp256k1, EIP-55 — from scratch
 js/data/modules.js      module metadata + the empty lessons array
-js/data/module-1..7.js  the 34 lessons
-js/diagrams.js          window.DIA — 38 inline-SVG line diagrams + their draw-in animation
-js/playground.js        window.LABS — all 34 interactive labs
+js/data/module-1..11.js the 52 lessons
+js/diagrams.js          window.DIA — 63 inline-SVG line diagrams + their draw-in animation
+js/playground.js        window.LABS — all 52 interactive labs
 js/app.js               router, rendering, progress, theme, search, highlighter
 ```
 
-Load order matters: `crypto-lite` → `modules` → `module-1..7` → `diagrams` → `playground` → `app`.
+Load order matters: `crypto-lite` → `modules` → `module-1..11` → `diagrams` → `playground` → `app`.
 `anime.css` loads after `style.css` and only overrides presentation; delete it and the app still works.
 
 ## The diagrams

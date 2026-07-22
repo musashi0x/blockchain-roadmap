@@ -1,4 +1,4 @@
-/* Module 7 — Sui & Move (lessons 27-30) */
+/* Module 7 — Sui & Move (lessons 27-36) */
 (function (L) {
 
 L.push({
@@ -476,6 +476,110 @@ function fillBuy(limit: number, wanted: number, asks: Ask[]) {
   resources: [
     { type: 'docs', title: 'DeepBook documentation', url: 'https://docs.sui.io/standards/deepbookv3' },
     { type: 'docs', title: 'Sui DeFi developer resources', url: 'https://docs.sui.io/guides/developer/defi' }
+  ]
+});
+
+L.push({
+  id: 'sui-defi-amm', module: 7, num: 35,
+  title: 'Sui AMMs, Pool Objects and Atomic Swaps',
+  level: 'Advanced', minutes: 75,
+  summary: 'Build the mental model for a Sui liquidity pool: shared reserves, owned input and output coins, constant-product pricing, and a signed slippage bound.',
+  objectives: [
+    'Model an AMM as a shared Pool object holding two Balance reserves',
+    'Derive an exact-input constant-product quote including a fee',
+    'Explain how a PTB keeps swap input, pool mutation and output atomic',
+    'Set minOut correctly and distinguish execution price from an oracle price'
+  ],
+  body: `
+<h3>A pool is shared; a trader’s coins are not</h3>
+<p>An AMM needs one common reserve state that every trader prices against, so its <code>Pool&lt;X, Y&gt;</code> is naturally a shared object. The coins a trader brings to the swap and receives afterwards remain address-owned objects. A transaction borrows the shared pool mutably, consumes the input <code>Coin&lt;X&gt;</code>, updates the reserves, and returns a fresh owned <code>Coin&lt;Y&gt;</code>.</p>
+<p>A programmable transaction block can split a payment coin, call the pool, transfer the output, and merge or return change as one atomic operation. Consensus orders changes to the shared pool, while users retain explicit ownership of their assets before and after that call.</p>
+
+<h3>Constant-product quote</h3>
+<p>For reserves <code>x</code> and <code>y</code>, a constant-product pool maintains <code>x · y = k</code>. Given an exact input <code>dx</code> and fee <code>f</code>:</p>
+<pre><code>dx_eff = dx · (1 − f)
+dy     = y · dx_eff / (x + dx_eff)</code></pre>
+<p>The trader transfers the full <code>dx</code> into the pool; only <code>dx_eff</code> is used in the output calculation. The difference stays in the pool as LP fees. The quote must use wide integer arithmetic before division, then round conservatively. Never calculate output from a floating-point UI value and assume it will match on chain.</p>
+
+<h3>Slippage is a signed safety condition</h3>
+<p>A pool quote is based on state observed before the transaction is included. Other swaps may execute first, especially against a shared pool. The user signs a <code>minOut</code> alongside the input amount and deadline; the Move entry function aborts if the computed output is smaller. That protects against ordinary movement and constrains sandwich extraction, though a very wide tolerance still leaves the user exposed.</p>
+<div class="note warn"><span class="tag">Price is not an oracle</span>AMM execution price is useful for a swap. It is unsafe by itself for valuing collateral: a thin pool can be moved temporarily with a flash loan. A lending market needs a robust feed or a carefully designed, sufficiently deep TWAP with freshness checks.</div>
+
+<h3>LPs own a changing reserve claim</h3>
+<p>Liquidity providers own a fraction of current reserves, not a promise to withdraw the original deposit. Arbitrage trades rebalance the pool whenever the external market moves, which creates impermanent loss relative to holding the two assets. Fees compensate LPs only when volume and fee income exceed that rebalancing cost. LP accounting can use a minted position object or a fungible LP coin; either design must protect the first deposit and account from actual balance changes, not caller-reported amounts.</p>
+`,
+  code: [{
+    lang: 'move', file: 'sources/constant_product_pool.move', caption: 'A teaching-sized shared pool. The user input Coin is consumed, the shared reserves change, and output is returned only if minOut is met.',
+    src: 'module workshop::constant_product_pool;\n\nuse sui::balance::{Self, Balance};\nuse sui::coin::{Self, Coin};\nuse sui::object::UID;\nuse sui::tx_context::TxContext;\n\nconst BPS: u64 = 10_000;\nconst FEE_BPS: u64 = 30;\nconst E_SLIPPAGE: u64 = 1;\nconst E_LIQUIDITY: u64 = 2;\n\npublic struct Pool<phantom X, phantom Y> has key {\n    id: UID, x: Balance<X>, y: Balance<Y>,\n}\n\npublic fun quote_x_for_y<X, Y>(pool: &Pool<X, Y>, amount_in: u64): u64 {\n    let x = balance::value(&pool.x) as u128;\n    let y = balance::value(&pool.y) as u128;\n    let effective_in = (amount_in as u128) * ((BPS - FEE_BPS) as u128);\n    ((y * effective_in) / (x * (BPS as u128) + effective_in)) as u64\n}\n\npublic entry fun swap_x_for_y<X, Y>(pool: &mut Pool<X, Y>, input: Coin<X>, min_out: u64, ctx: &mut TxContext): Coin<Y> {\n    let amount_out = quote_x_for_y(pool, coin::value(&input));\n    assert!(amount_out >= min_out, E_SLIPPAGE);\n    assert!(amount_out < balance::value(&pool.y), E_LIQUIDITY);\n    balance::join(&mut pool.x, coin::into_balance(input));\n    coin::from_balance(balance::split(&mut pool.y, amount_out), ctx)\n}\n\n// Production code also needs LP-share minting, initial-liquidity protection,\n// checked rounding, pause controls and audited package configuration.'
+  }],
+  lab: 'suiamm',
+  quiz: [
+    { q: 'Why is a Sui AMM pool normally a shared object?', options: ['Every trader must own the pool coin', 'Unrelated traders need one ordered view of the common mutable reserves', 'Move coins can only enter shared objects', 'AMMs never use owned assets'], answer: 1, why: 'The reserves are a coordination point: each swap changes the price for the next one. Input and output coins can still be owned objects at the edges of that shared call.' },
+    { q: 'What does minOut protect in an exact-input swap?', options: ['It guarantees a profitable trade', 'It aborts if output is worse than the user’s signed tolerance', 'It fixes the pool price permanently', 'It removes the pool fee'], answer: 1, why: 'State can change after a quote. minOut turns the acceptable worst case into an on-chain check; it does not eliminate market or smart-contract risk.' },
+    { q: 'Why is an AMM spot price unsuitable as the sole lending oracle?', options: ['AMMs do not produce prices', 'A shallow pool can be moved temporarily, creating artificial collateral value for one transaction', 'The price has too many decimals', 'Shared objects cannot be read by lending code'], answer: 1, why: 'Execution liquidity and collateral valuation have different safety requirements. A manipulation-resistant and fresh price source is part of lending solvency.' }
+  ],
+  tasks: [
+    'Use the lab to compare the output and price impact of a 1%, 10% and 50% reserve-size trade.',
+    'Set a 50 bps minOut from the quote, then change the pool reserves and observe when the swap would abort.',
+    'Sketch a PTB that splits SUI, calls a pool, transfers output and returns any unused input atomically.',
+    'Extend the pool design with LP shares and state how you prevent a first-depositor share-price attack.'
+  ],
+  resources: [
+    { type: 'docs', title: 'Sui DeFi developer resources', url: 'https://docs.sui.io/guides/developer/defi' },
+    { type: 'docs', title: 'Programmable transaction blocks', url: 'https://docs.sui.io/concepts/transactions/prog-txn-blocks' },
+    { type: 'read', title: 'Uniswap V2 whitepaper', url: 'https://uniswap.org/whitepaper.pdf' }
+  ]
+});
+
+L.push({
+  id: 'sui-defi-lending', module: 7, num: 36,
+  title: 'Sui Lending Markets, Oracles and Liquidations',
+  level: 'Advanced', minutes: 75,
+  summary: 'Design overcollateralised credit on Sui by separating shared market liquidity from owned borrower positions and treating oracle quality as a solvency boundary.',
+  objectives: [
+    'Model a shared lending market and an address-owned borrower position',
+    'Calculate a health factor and liquidation price from a risk threshold',
+    'Explain why debt accrues through an index rather than per-account loops',
+    'Define oracle freshness, collateral caps and liquidation incentives'
+  ],
+  body: `
+<h3>Shared liquidity, owned positions</h3>
+<p>A lending market has common liquidity, rates and risk parameters, making the <code>Market&lt;Collateral, Debt&gt;</code> a shared object. Each borrower can hold an address-owned <code>Position</code> containing their collateral claim and scaled debt. Borrowing touches both: the market’s available liquidity and the borrower’s position. Unrelated users keep their position objects separate, even though market actions must be ordered around shared liquidity.</p>
+
+<h3>Health factor</h3>
+<pre><code>HF = collateralAmount · collateralPrice · liquidationThreshold
+     ───────────────────────────────────────────────────────
+                   debtAmount · debtPrice</code></pre>
+<p>A health factor below <code>1</code> means collateral no longer supports the debt at the configured threshold. A liquidator repays part of the debt and receives collateral at a bonus. That bonus pays for gas, price risk and competition; if it is too small, nobody liquidates, and if it is too large, it worsens a downward cascade.</p>
+
+<h3>Interest is global accounting</h3>
+<p>Move code cannot loop through every borrower each block. Instead the shared market maintains a borrow index, updated whenever the market is touched. A position stores scaled debt; its current debt is its scaled value multiplied by the latest index. This gives all borrowers the same rate without an unbounded iteration.</p>
+<pre><code>currentDebt = scaledDebt · market.borrowIndex / position.lastBorrowIndex</code></pre>
+
+<h3>Oracles and risk limits</h3>
+<p>A lending protocol does not become safe merely by adding a price-feed call. It must reject stale or non-positive answers, normalise decimals, document a fallback policy and cap how much of each collateral type may enter the market. Thin or correlated collateral deserves a lower threshold, a smaller supply cap or isolation from other markets. When the feed is uncertain, pause borrowing and withdrawals that increase risk; keep repayments and risk-reducing liquidations available where possible.</p>
+<div class="note danger"><span class="tag">Bad debt is possible</span>Fast price moves, illiquid collateral and delayed oracle updates can leave less collateral value than debt. Decide the loss waterfall before launch: reserves, an insurance module, then suppliers if those buffers are exhausted. Governance cannot vote away an economic loss.</div>
+`,
+  code: [{
+    lang: 'move', file: 'sources/lending_risk.move', caption: 'The core ownership and health-factor calculation. Price inputs must come from a validated oracle adapter, not a mutable pool spot price.',
+    src: 'module workshop::lending_risk;\n\nuse sui::balance::{Self, Balance};\nuse sui::object::UID;\n\nconst BPS: u64 = 10_000;\n\npublic struct Market<phantom C, phantom D> has key {\n    id: UID,\n    available_debt: Balance<D>,\n    liquidation_threshold_bps: u64,\n    borrow_index: u128,\n}\n\npublic struct Position<phantom C, phantom D> has key {\n    id: UID,\n    collateral: Balance<C>,\n    scaled_debt: u128,\n    last_borrow_index: u128,\n}\n\npublic fun health_factor_bps<C, D>(market: &Market<C, D>, position: &Position<C, D>, collateral_price: u64, debt_price: u64): u64 {\n    let debt = (position.scaled_debt * market.borrow_index) / position.last_borrow_index;\n    if (debt == 0) return 0xffff_ffff_ffff_ffff;\n    let collateral_value = (balance::value(&position.collateral) as u128) * (collateral_price as u128);\n    let debt_value = debt * (debt_price as u128);\n    ((collateral_value * (market.liquidation_threshold_bps as u128)) / debt_value) as u64\n}\n\npublic fun is_liquidatable<C, D>(market: &Market<C, D>, position: &Position<C, D>, collateral_price: u64, debt_price: u64): bool {\n    health_factor_bps(market, position, collateral_price, debt_price) < BPS\n}\n\n// A real market accrues the index, validates oracle freshness, checks caps,\n// uses checked precision throughout, and caps each liquidation repayment.'
+  }],
+  lab: 'suilend',
+  quiz: [
+    { q: 'Which state is most naturally address-owned in a Sui lending protocol?', options: ['The market’s total available liquidity', 'A borrower’s individual collateral and debt position', 'The protocol-wide interest-rate model', 'A shared oracle configuration'], answer: 1, why: 'The borrower position represents one user’s claim and can remain owned. The common market liquidity and risk state are shared coordination points.' },
+    { q: 'Why does a lending market use a borrow index?', options: ['To hide borrower debt', 'To accrue interest globally without iterating through every borrower', 'To make liquidations impossible', 'To replace an oracle'], answer: 1, why: 'Each account stores scaled debt. Multiplying it by the current global index realises accrued interest when that account is touched.' },
+    { q: 'What should a protocol do when its collateral price is stale?', options: ['Keep opening new loans using the old value', 'Pause risk-increasing actions while retaining a defined path for repayment and liquidation', 'Set the price to zero and liquidate everyone', 'Read a shallow AMM spot price instead'], answer: 1, why: 'A stale price makes solvency unknowable. Failing closed for new risk, with an explicit emergency policy, is safer than lending against an arbitrary old or manipulable value.' }
+  ],
+  tasks: [
+    'Use the lab to find the collateral price at which a position reaches HF = 1.',
+    'Change the liquidation bonus and explain the trade-off between liquidator participation and borrower loss.',
+    'Write an oracle policy for one collateral asset: feed, heartbeat, decimal scale, fallback and supply cap.',
+    'Draw the object graph for a market, borrower position, risk-admin capability and insurance reserve.'
+  ],
+  resources: [
+    { type: 'docs', title: 'Sui DeFi developer resources', url: 'https://docs.sui.io/guides/developer/defi' },
+    { type: 'docs', title: 'Sui object ownership', url: 'https://docs.sui.io/concepts/object-ownership' },
+    { type: 'docs', title: 'Sui oracle developer resources', url: 'https://docs.sui.io/guides/developer/defi/oracles' }
   ]
 });
 
