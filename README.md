@@ -1,6 +1,6 @@
 # Blockchain Roadmap
 
-A complete, self-contained blockchain learning course: **26 lessons across 6 modules**, one lesson per
+A complete, self-contained blockchain learning course: **34 lessons across 7 modules**, one lesson per
 session, each with a line diagram, worked code examples and a live lab that runs in the page.
 
 Open `index.html` in a browser. That is the whole install.
@@ -20,19 +20,20 @@ your own browser's `localStorage` and never leaves the machine.
 | 4 | Tooling & dApps | 4 | Foundry and Hardhat, fuzz and invariant testing, viem frontends, deploy/verify/index |
 | 5 | Security & Gas | 3 | reentrancy and the classic bug families, oracles/MEV/signatures, gas and upgradeability |
 | 6 | DeFi, Scaling & Capstone | 4 | AMMs, lending and liquidation, rollups and bridges, a ZK sealed-bid auction capstone |
+| 7 | Sui & Move | 8 | object ownership, Move, PTBs, shared dApps, Kiosk policies, sponsorship, walletless auth and DeepBook |
 
 Every lesson contains:
 
 - **objectives** — what you can do afterwards, not what you will have read
 - **explanation** — the mechanics, including the failure modes
-- **a line diagram** — the same mechanics as a picture, drawn in SVG
-- **worked code** — Solidity, TypeScript, shell, all copyable
-- **a live lab** — 26 of them, listed below
+- **a line diagram** — the same mechanics as a picture; it draws itself when you reach it
+- **worked code** — Move, Solidity, TypeScript, shell, all copyable
+- **a live lab** — 34 of them, listed below
 - **a quiz** — with an explanation on every answer, right or wrong
 - **exercises** — the part that needs a keyboard
 - **resources** — specs, docs and primary sources
 
-Roughly 31 hours of guided material, plus the exercises.
+Roughly 39 hours of guided material, plus the exercises.
 
 ## The labs
 
@@ -66,6 +67,14 @@ These are not animations. They compute the real thing.
 | 24 | `lending` | health factor, liquidation price, and a working partial liquidation |
 | 25 | `rollup` | calldata versus blob economics, and the three withdrawal paths |
 | 26 | `commit` | commit-reveal — then crack a saltless commitment by brute force |
+| 27 | `suiobjects` | owned, shared and immutable objects; see the execution path change |
+| 28 | `suicap` | Move abilities and an AdminCap authority check |
+| 29 | `suiptb` | assemble a split, move call and transfer as one programmable transaction block |
+| 30 | `suishared` | compare shared coordination with address-owned state and inspect events |
+| 31 | `suikiosk` | Kiosk custody, transfer-policy receipts and creator royalties |
+| 32 | `suisponsor` | user intent and gas-station policy checks in a sponsored transaction |
+| 33 | `suiauth` | compare wallets, zkLogin and passkeys through their custody and recovery boundaries |
+| 34 | `suibook` | sweep a limit-order book while respecting the signed limit price |
 
 ## Running it
 
@@ -103,18 +112,18 @@ css/style.css           layout and components; light and dark via [data-theme]
 css/anime.css           the anime skin — palette, glow, brackets, diagram styling
 js/lib/crypto-lite.js   SHA-256, Keccak-256, secp256k1, EIP-55 — from scratch
 js/data/modules.js      module metadata + the empty lessons array
-js/data/module-1..6.js  the 26 lessons
-js/diagrams.js          window.DIA — 30 inline-SVG line diagrams
-js/playground.js        window.LABS — all 26 interactive labs
+js/data/module-1..7.js  the 34 lessons
+js/diagrams.js          window.DIA — 38 inline-SVG line diagrams + their draw-in animation
+js/playground.js        window.LABS — all 34 interactive labs
 js/app.js               router, rendering, progress, theme, search, highlighter
 ```
 
-Load order matters: `crypto-lite` → `modules` → `module-1..6` → `diagrams` → `playground` → `app`.
+Load order matters: `crypto-lite` → `modules` → `module-1..7` → `diagrams` → `playground` → `app`.
 `anime.css` loads after `style.css` and only overrides presentation; delete it and the app still works.
 
 ## The diagrams
 
-Every lesson gets a **Diagram** panel between the explanation and the code — 29 of them, plus a
+Every lesson gets a **Diagram** panel between the explanation and the code — 37 of them, plus a
 roadmap overview on the home page. They are hand-laid inline SVG built by a small drawing kit in
 `js/diagrams.js` (`box`, `arr`, `elb`, `cur`, `flow`, `life`, `diamond`, `cyl`, …).
 
@@ -122,6 +131,16 @@ Nothing is rasterised and nothing is fetched. Strokes and fills read CSS custom 
 diagrams re-theme with the page and stay sharp at any zoom. Arrowheads are real polygons rather than
 SVG `<marker>`s, because a marker cannot portably inherit the colour of the line that references it.
 On narrow screens each diagram scrolls sideways inside its figure instead of shrinking the labels.
+
+**They draw themselves.** When a diagram scrolls into view the boxes pop in, each line draws along its
+own length, then the arrowheads and labels arrive — so you watch the flow being built in the order it
+happens rather than meeting it all at once. Afterwards a little ambient motion remains: dashed flow
+arrows march, and a pulse travels down the busiest wires. **▶ replay** on any figure runs it again.
+
+The mechanism is an `IntersectionObserver` plus two classes on the `<svg>` — `.run` while it draws,
+`.flow` once it has settled — so the browser animates opacity, transform and `stroke-dashoffset` and
+nothing runs off-screen. `prefers-reduced-motion: reduce` skips the whole thing: every diagram renders
+static and finished, and the replay button is hidden. Printing does the same.
 
 Add one by calling `add(lessonId, title, caption, width, height, svgBody)` in `js/diagrams.js`; the
 lesson picks it up automatically.
@@ -148,7 +167,7 @@ Run it yourself any time from the console.
 
 ```js
 L.push({
-  id: 'l27', module: 6, num: 27,
+  id: 'l31', module: 7, num: 31,
   title: 'Your Lesson',
   level: 'Intermediate',        // Beginner | Intermediate | Advanced
   minutes: 70,

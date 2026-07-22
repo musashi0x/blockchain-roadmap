@@ -807,6 +807,127 @@
     })());
 
   /* =========================================================
+     MODULE 7 — SUI & MOVE
+     ========================================================= */
+
+  add('l27', 'Objects make the transaction’s state footprint explicit',
+    'Independent owned-object updates can proceed without a common mutable input. A shared pool is intentionally common state, so its writes are ordered through consensus.',
+    W, 300,
+    (function () {
+      var s = box({ x: 35, y: 42, w: 220, h: 72, t: 'Alice’s Badge', sub: 'owned object · v4', c: 'ok' });
+      s += box({ x: 35, y: 174, w: 220, h: 72, t: 'Bob’s Badge', sub: 'owned object · v9', c: 'ok' });
+      s += box({ x: 355, y: 42, w: 205, h: 72, t: 'Alice tx', sub: 'promote badge', c: 'acc' });
+      s += box({ x: 355, y: 174, w: 205, h: 72, t: 'Bob tx', sub: 'promote badge', c: 'acc' });
+      s += arr(255, 78, 355, 78, 'ok', 'distinct input') + arr(255, 210, 355, 210, 'ok', 'distinct input');
+      s += box({ x: 660, y: 42, w: 200, h: 72, t: 'parallel execute', sub: 'no write conflict', c: 'ok' });
+      s += arr(560, 78, 660, 78, 'ok') + arr(560, 210, 660, 114, 'ok');
+      s += box({ x: 35, y: 260, w: 250, h: 30, t: 'shared AMM pool → consensus orders each mutation', c: 'hot' });
+      s += note(35, 28, 'OWNERSHIP IS PART OF THE EXECUTION PLAN');
+      return s;
+    })());
+
+  add('l28', 'A capability is the object that proves authority',
+    'The initializer creates one AdminCap and transfers it to its first holder. Every privileged call takes a reference to that scarce resource; an ID alone proves nothing.',
+    W, 285,
+    (function () {
+      var s = box({ x: 40, y: 48, w: 210, h: 70, t: 'package init', sub: 'creates exactly one cap', c: 'acc' });
+      s += box({ x: 340, y: 48, w: 210, h: 70, t: 'AdminCap', sub: 'key · store · scarce', c: 'ok' });
+      s += box({ x: 640, y: 48, w: 210, h: 70, t: 'multisig / holder', sub: 'controls the cap', c: 'hot' });
+      s += arr(250, 83, 340, 83, 'acc', 'transfer') + arr(550, 83, 640, 83, 'ok', 'custody');
+      s += box({ x: 340, y: 180, w: 210, h: 64, t: 'pause(&AdminCap)', sub: 'privileged function', c: 'ok' });
+      s += arr(745, 118, 530, 180, 'hot', 'provides &cap');
+      s += box({ x: 40, y: 180, w: 205, h: 64, t: 'public object ID', sub: 'identifier only', c: 'bad' });
+      s += line(245, 212, 320, 212, 'bad dash') + mid(282, 203, 'not authority', 'd-m');
+      s += note(40, 30, 'MOVE ABILITIES MAKE ASSET INVARIANTS PART OF THE TYPE');
+      return s;
+    })());
+
+  add('l29', 'A PTB passes temporary results from command to command',
+    'Split a payment, mint an object and transfer both results in one atomic transaction. If any command fails, none of the changes become effects.',
+    W, 290,
+    (function () {
+      var s = box({ x: 35, y: 108, w: 155, h: 62, t: 'gas coin', sub: '5,000,000 MIST', c: 'hot' });
+      s += box({ x: 265, y: 108, w: 175, h: 62, t: 'SplitCoins', sub: '→ payment', c: 'acc' });
+      s += box({ x: 515, y: 38, w: 180, h: 62, t: 'MoveCall', sub: '→ Badge object', c: 'ok' });
+      s += box({ x: 750, y: 108, w: 120, h: 62, t: 'transfer', sub: 'recipient', c: 'ok' });
+      s += arr(190, 139, 265, 139, 'hot') + arr(440, 139, 750, 139, 'acc', 'payment result');
+      s += arr(695, 69, 810, 108, 'ok', 'badge result');
+      s += box({ x: 265, y: 220, w: 430, h: 38, t: 'ONE SIGNATURE · ATOMIC EFFECTS OR ROLLBACK', c: 'hot' });
+      s += note(35, 28, 'COMMAND RESULTS EXIST ONLY INSIDE THIS TRANSACTION UNTIL COMMIT');
+      return s;
+    })());
+
+  add('l30', 'Keep shared coordination small; keep user assets owned',
+    'A shared board is the common coordination point and emits an event. Each player’s inventory remains address-owned, so independent changes do not all queue behind the board.',
+    W, 300,
+    (function () {
+      var s = box({ x: 330, y: 45, w: 245, h: 70, t: 'shared Scoreboard', sub: 'high score + small config', c: 'hot' });
+      s += box({ x: 35, y: 170, w: 190, h: 62, t: 'Alice inventory', sub: 'address-owned', c: 'ok' });
+      s += box({ x: 355, y: 170, w: 190, h: 62, t: 'Bob inventory', sub: 'address-owned', c: 'ok' });
+      s += box({ x: 675, y: 170, w: 190, h: 62, t: 'Carol inventory', sub: 'address-owned', c: 'ok' });
+      s += arr(130, 170, 405, 115, 'acc', 'submit score') + arr(450, 170, 452, 115, 'acc') + arr(770, 170, 500, 115, 'acc');
+      s += box({ x: 620, y: 45, w: 220, h: 70, t: 'ScoreSubmitted event', sub: 'indexer / activity feed', c: 'acc' });
+      s += arr(575, 80, 620, 80, 'hot', 'emit');
+      s += note(35, 30, 'SHARE WHAT MUST COORDINATE — NOT EVERY PIECE OF USER STATE');
+      return s;
+    })());
+
+  add('l31', 'Kiosk custody and transfer policy have different jobs',
+    'The Kiosk holds and lists an object. A transfer-policy rule must produce its receipt before the request can be confirmed and the asset reaches its buyer.',
+    W, 285,
+    (function () {
+      var s = box({ x: 35, y: 102, w: 160, h: 64, t: 'seller Kiosk', sub: 'listed item', c: 'acc' });
+      s += box({ x: 285, y: 102, w: 180, h: 64, t: 'transfer request', sub: 'transaction-local', c: 'hot' });
+      s += box({ x: 555, y: 34, w: 195, h: 64, t: 'royalty rule', sub: 'payment → receipt', c: 'ok' });
+      s += box({ x: 555, y: 184, w: 195, h: 64, t: 'policy confirm', sub: 'all rules satisfied', c: 'ok' });
+      s += box({ x: 805, y: 102, w: 65, h: 64, t: 'buyer', sub: 'item', c: 'acc' });
+      s += arr(195, 134, 285, 134, 'acc', 'take') + arr(465, 134, 555, 66, 'hot', 'pay') + arr(652, 98, 652, 184, 'ok', 'receipt') + arr(750, 216, 805, 134, 'ok', 'transfer');
+      s += note(35, 30, 'A MARKETPLACE UI CANNOT BYPASS A POLICY THE ASSET TYPE REQUIRES');
+      return s;
+    })());
+
+  add('l32', 'Sponsored transactions bind two signatures to one intent',
+    'The user reviews and signs the final transaction bytes. The gas station checks its policy and signs those same bytes as gas owner — it must not rewrite the transaction.',
+    W, 285,
+    (function () {
+      var s = box({ x: 35, y: 96, w: 180, h: 68, t: 'user', sub: 'reviews + signs intent', c: 'ok' });
+      s += box({ x: 315, y: 96, w: 220, h: 68, t: 'final transaction bytes', sub: 'sender · target · args · gas', c: 'hot' });
+      s += box({ x: 635, y: 96, w: 190, h: 68, t: 'gas station', sub: 'policy checks + signs', c: 'acc' });
+      s += arr(215, 130, 315, 130, 'ok', 'user signature') + arr(535, 130, 635, 130, 'acc', 'same bytes');
+      s += box({ x: 315, y: 220, w: 220, h: 36, t: 'submit → atomic effects', c: 'ok' });
+      s += arr(730, 164, 475, 220, 'hot', 'both signatures');
+      s += note(35, 30, 'CHANGE ONE BYTE → REQUIRE FRESH USER APPROVAL');
+      return s;
+    })());
+
+  add('l33', 'Walletless onboarding still has a custody boundary',
+    'zkLogin binds an OAuth identity to an ephemeral signing key with a proof; passkeys use WebAuthn credentials. Both need intentional recovery and secret-handling design.',
+    W, 285,
+    (function () {
+      var s = box({ x: 35, y: 44, w: 175, h: 62, t: 'OAuth issuer', sub: 'identity token', c: 'acc' });
+      s += box({ x: 295, y: 44, w: 190, h: 62, t: 'client', sub: 'salt + ephemeral key', c: 'hot' });
+      s += box({ x: 570, y: 44, w: 190, h: 62, t: 'zkLogin proof', sub: 'binds claims + key', c: 'ok' });
+      s += box({ x: 775, y: 44, w: 95, h: 62, t: 'Sui', sub: 'verify', c: 'acc' });
+      s += arr(210, 75, 295, 75, 'acc') + arr(485, 75, 570, 75, 'hot') + arr(760, 75, 775, 75, 'ok');
+      s += box({ x: 260, y: 185, w: 390, h: 58, t: 'Passkey alternative: WebAuthn credential + recovery plan', sub: 'device authentication is not the same thing as OAuth', c: 'ok' });
+      s += note(35, 30, 'DO NOT MOVE EPHEMERAL KEYS OR SALTS INTO UNREVIEWED SERVER LOGS');
+      return s;
+    })());
+
+  add('l34', 'A shared order book matches owned user assets at a limit price',
+    'The market is common mutable state. The buyer’s coin enters a PTB, fills only eligible asks, then output and change return as owned objects.',
+    W, 285,
+    (function () {
+      var s = box({ x: 35, y: 100, w: 180, h: 64, t: 'buyer coin', sub: 'address-owned', c: 'ok' });
+      s += box({ x: 305, y: 100, w: 220, h: 64, t: 'shared DeepBook market', sub: 'price-time matching', c: 'hot' });
+      s += box({ x: 615, y: 38, w: 190, h: 64, t: 'eligible asks', sub: 'price ≤ limit', c: 'acc' });
+      s += box({ x: 615, y: 190, w: 190, h: 64, t: 'filled output + change', sub: 'owned objects', c: 'ok' });
+      s += arr(215, 132, 305, 132, 'ok', 'PTB input') + arr(525, 132, 615, 70, 'hot', 'match') + arr(710, 102, 710, 190, 'acc', 'settle');
+      s += note(35, 30, 'LIMIT PRICE AND MINIMUM OUTPUT BELONG IN THE SIGNED TRANSACTION');
+      return s;
+    })());
+
+  /* =========================================================
      HOME — the whole roadmap on one line
      ========================================================= */
 
@@ -814,7 +935,7 @@
     var mods = (global.ROADMAP && global.ROADMAP.modules) || [];
     var w = 900, h = 250;
     var s = txt(20, 26, 'THE ROUTE', 'd-k');
-    var bw = 128, gap = 16, x0 = 20, y = 56;
+    var bw = 112, gap = 12, x0 = 20, y = 56;
     var body = '';
     mods.forEach(function (m, i) {
       var x = x0 + i * (bw + gap);
@@ -824,7 +945,7 @@
       body += mid(x + bw / 2, y + 50, m.name.split(' ')[0].replace(/[^A-Za-z0-9]+$/, ''), 'd-t');
       if (i < mods.length - 1) body += arr(x + bw, y + 36, x + bw + gap, y + 36, 'acc');
       // drop line to a one-word outcome
-      var labels = ['hash · sign · prove', 'UTXO · PoW · PoS', 'EVM · gas · ERC', 'test · deploy · ship', 'exploit · defend', 'AMM · rollup · ZK'];
+      var labels = ['hash · sign · prove', 'UTXO · PoW · PoS', 'EVM · gas · ERC', 'test · deploy · ship', 'exploit · defend', 'AMM · rollup · ZK', 'objects · Move · PTB'];
       body += line(x + bw / 2, y + 72, x + bw / 2, y + 96 + (i % 2) * 22, 'thin dash');
       body += mid(x + bw / 2, y + 112 + (i % 2) * 22, labels[i], 'd-m');
     });
@@ -835,6 +956,158 @@
     return svg(w, h, s);
   }
 
+  /* ============================================================
+     animation
+
+     Diagrams draw themselves when they scroll into view: boxes
+     pop, lines draw along their own length, then heads and
+     labels fade in. Once a diagram has finished drawing it keeps
+     a little ambient motion — marching dashes on flow arrows and
+     a pulse travelling down the busiest wires.
+
+     Everything is CSS transitions driven by two classes on the
+     <svg> (.run, .flow), so the browser animates on the compositor
+     and prefers-reduced-motion switches the whole thing off.
+     ============================================================ */
+
+  var reduce = !!(global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var io = null;
+
+  function len(e) {
+    try { return e.getTotalLength(); } catch (err) { return 0; }
+  }
+
+  /* next frame if the page is visible, next task if it is not: rAF never
+     fires in a hidden tab, and a diagram must not be left mid-reset. */
+  function soon(fn) {
+    var done = false;
+    function go() { if (done) return; done = true; fn(); }
+    if (global.requestAnimationFrame) global.requestAnimationFrame(go);
+    setTimeout(go, 40);
+  }
+
+  /* travelling pulse: a clone of the line wearing a short dash that
+     marches from one end to the other. Capped per diagram, longest
+     accent arrows first, so it reads as emphasis and not as noise. */
+  function sparks(sv) {
+    var cand = [];
+    sv.querySelectorAll('.d-line.acc, .d-line.hot').forEach(function (e) {
+      if (e.classList.contains('dash') || e.classList.contains('thin')) return;
+      var L = len(e);
+      if (L > 70) cand.push({ e: e, L: L });
+    });
+    cand.sort(function (a, b) { return b.L - a.L; });
+    cand.slice(0, 3).forEach(function (c) {
+      var s = c.e.cloneNode(false);
+      s.removeAttribute('style');
+      s.setAttribute('class', 'd-spark' + (c.e.classList.contains('hot') ? ' hot' : ''));
+      s.style.setProperty('--len', c.L);
+      s.style.strokeDasharray = '10 ' + n(c.L - 10);
+      s.style.animationDuration = Math.max(3.2, c.L / 70) + 's';
+      sv.appendChild(s);
+    });
+  }
+
+  /* one pass over the diagram: tag every element with how it enters
+     and when. Runs once per <svg>; the result is cached on the node. */
+  function prepare(sv) {
+    if (sv.__prepped) return;
+    sv.__prepped = true;
+    sv.classList.add('anim');
+
+    var last = 0, bi = 0, li = 0, hi = 0, ti = 0;
+    sv.querySelectorAll('.d-box, .d-line, .d-head, text').forEach(function (e) {
+      var d;
+      if (e.classList.contains('d-box')) {
+        d = Math.min(bi++ * 46, 820);
+        e.classList.add('a-pop');
+      } else if (e.classList.contains('d-head')) {
+        d = 1250 + Math.min(hi++ * 44, 1100);
+        e.classList.add('a-fade');
+      } else if (e.tagName === 'text') {
+        d = 1050 + Math.min(ti++ * 26, 1200);
+        e.classList.add('a-fade');
+      } else {
+        d = 420 + Math.min(li++ * 48, 1150);
+        var L = e.classList.contains('dash') ? 0 : len(e);
+        if (L > 0.5) {
+          e.classList.add('a-draw');
+          e.dataset.len = L;
+          e.style.strokeDasharray = L;
+          e.style.strokeDashoffset = L;
+        } else {
+          e.classList.add('a-fade');   /* dashed lines fade rather than draw:
+                                          drawing them would flash solid first */
+        }
+      }
+      e.style.transitionDelay = d + 'ms';
+      if (d > last) last = d;
+    });
+
+    sv.__total = last + 1300;   /* must outlast the slowest transition above */
+    sparks(sv);
+  }
+
+  function run(sv) {
+    sv.classList.add('run');
+    sv.querySelectorAll('.a-draw').forEach(function (e) { e.style.strokeDashoffset = '0'; });
+    clearTimeout(sv.__t);
+    sv.__t = setTimeout(function () {
+      /* hand the strokes back to the stylesheet so .dash patterns return */
+      sv.querySelectorAll('.a-draw').forEach(function (e) {
+        e.style.strokeDasharray = '';
+        e.style.strokeDashoffset = '';
+      });
+      sv.classList.add('flow');
+    }, sv.__total);
+  }
+
+  /* snap back to the pre-draw state. .noanim kills transitions while we do
+     it, otherwise the browser sees 1 -> 0 -> 1 in one frame and reverses the
+     transition instead of restarting it, which makes replay look like nothing
+     happened. */
+  function reset(sv) {
+    clearTimeout(sv.__t);
+    sv.classList.add('noanim');
+    sv.classList.remove('run', 'flow');
+    sv.querySelectorAll('.a-draw').forEach(function (e) {
+      e.style.strokeDasharray = e.dataset.len;
+      e.style.strokeDashoffset = e.dataset.len;
+    });
+    void sv.getBoundingClientRect();   /* flush the reset before .run returns */
+  }
+
+  function onView(entries) {
+    entries.forEach(function (en) {
+      if (!en.isIntersecting) return;
+      io.unobserve(en.target);
+      run(en.target);
+    });
+  }
+
+  /* called by the app after a diagram panel is in the document */
+  function animate(root) {
+    var svgs = (root || document).querySelectorAll('svg.dia');
+    if (!svgs.length) return;
+    if (reduce) return;                       /* leave every diagram static */
+    if (!global.IntersectionObserver) {
+      svgs.forEach(function (sv) { prepare(sv); run(sv); });
+      return;
+    }
+    if (io) io.disconnect(); else io = new global.IntersectionObserver(onView, { threshold: 0.12 });
+    svgs.forEach(function (sv) { prepare(sv); io.observe(sv); });
+  }
+
+  function replay(sv) {
+    if (!sv || reduce) return;
+    prepare(sv);
+    reset(sv);
+    soon(function () {
+      sv.classList.remove('noanim');
+      run(sv);
+    });
+  }
+
   /* ---------- export ---------- */
 
   global.DIA = {
@@ -842,6 +1115,9 @@
     home: function () { return { title: 'Six modules, one path', cap: 'Each module assumes the one before it. The labs get harder in exactly the same order.', svg: homeSvg() }; },
     count: function () { var t = 0; for (var k in D) if (Object.prototype.hasOwnProperty.call(D, k)) t += D[k].length; return t; },
     ids: function () { return Object.keys(D); },
+    animate: animate,
+    replay: replay,
+    reduced: function () { return reduce; },
     /* the drawing kit, exported so labs can draw too */
     kit: { svg: svg, box: box, arr: arr, line: line, elb: elb, elbV: elbV, cur: cur, txt: txt, mid: mid, flow: flow, dot: dot, diamond: diamond, cyl: cyl, life: life, note: note, poly: poly }
   };

@@ -352,6 +352,12 @@ body::after {
 .note.danger .tag { color: var(--err); }
 
 .prose code { color: var(--accent-2); border-radius: 0; }
+.prose pre {
+  border-radius: 0; border-left-width: 3px;
+  background: color-mix(in srgb, var(--accent-4) 7%, var(--bg-elev-2));
+  box-shadow: inset 0 0 26px color-mix(in srgb, var(--accent-4) 7%, transparent);
+}
+.prose pre code { color: var(--text); letter-spacing: .01em; }
 .prose strong { color: var(--accent-3); }
 .prose h3 { text-transform: uppercase; letter-spacing: .05em; font-size: 16px; color: var(--text); }
 .prose h3::before { content: "▚ "; color: var(--accent); font-size: 12px; }
@@ -405,7 +411,8 @@ body::after {
 .d-line.ok  { stroke: var(--ok); }
 .d-line.bad { stroke: var(--err); }
 .d-line.dash { stroke-dasharray: 6 5; }
-.d-line.thin { stroke-width: 1; opacity: .6; }
+/* stroke-opacity, not opacity: the entrance animation owns opacity */
+.d-line.thin { stroke-width: 1; stroke-opacity: .6; }
 
 /* arrow heads mirror the line modifier so colour stays in sync */
 .d-head { fill: var(--d-line); stroke: none; }
@@ -430,6 +437,68 @@ body::after {
 
 .d-flow { stroke-dasharray: 7 7; animation: dflow 1.1s linear infinite; }
 @keyframes dflow { to { stroke-dashoffset: -14; } }
+
+/* ---------- diagram animation ----------
+   .anim  = prepared, waiting off-screen
+   .run   = drawing itself in
+   .flow  = finished; ambient motion only                        */
+
+.dia-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 10px; }
+.dia-head .dia-title { margin: 0; }
+
+.dia-replay {
+  margin-left: auto; flex: none; cursor: pointer;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-faint); background: none; padding: 3px 9px;
+  border: 1px solid var(--border-soft); border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+  transition: color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.dia-replay:hover { color: var(--accent-2); border-color: var(--accent-2); box-shadow: var(--glow-2); }
+.dia-replay:active { transform: translateY(1px); }
+
+.dia.anim .a-pop, .dia.anim .a-fade {
+  opacity: 0; transform-box: fill-box; transform-origin: 50% 50%;
+  transition: opacity .78s ease, transform .95s cubic-bezier(.16, .84, .3, 1);
+}
+.dia.anim .a-pop  { transform: scale(.93); }
+.dia.anim .a-fade { transform: translateY(4px); }
+.dia.anim.run .a-pop, .dia.anim.run .a-fade { opacity: 1; transform: none; }
+
+.dia.anim .a-draw { transition: stroke-dashoffset 1.2s cubic-bezier(.36, 0, .2, 1); }
+
+/* one frame with everything frozen, so replay restarts instead of reversing */
+.dia.noanim, .dia.noanim * { transition: none !important; animation: none !important; }
+
+/* ambient: dashed flow arrows march, lifelines stay still */
+.dia.flow .d-line.dash:not(.thin) { animation: dmarch 4.8s linear infinite; }
+@keyframes dmarch { to { stroke-dashoffset: -11; } }
+
+/* ambient: a pulse travelling down the busiest wires */
+.d-spark {
+  fill: none; stroke: var(--accent-2); stroke-width: 3.4; stroke-linecap: round;
+  opacity: 0; pointer-events: none;
+  transition: opacity .5s ease;
+}
+.d-spark.hot { stroke: var(--accent); }
+.dia.flow .d-spark {
+  opacity: .95;
+  animation: dspark linear infinite;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent-2) 65%, transparent));
+}
+.dia.flow .d-spark.hot { filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent) 65%, transparent)); }
+@keyframes dspark { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dia.anim .a-pop, .dia.anim .a-fade { opacity: 1; transform: none; }
+  .dia.flow .d-line.dash:not(.thin), .dia.flow .d-spark { animation: none; }
+  .d-spark { display: none; }
+  .dia-replay { display: none; }
+}
+@media print {
+  .dia.anim .a-pop, .dia.anim .a-fade { opacity: 1 !important; transform: none !important; }
+  .d-spark, .dia-replay { display: none; }
+}
 
 /* ---------- misc ---------- */
 .empty { letter-spacing: .04em; }

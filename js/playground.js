@@ -1997,6 +1997,246 @@ STOP</textarea></div>
       };
     });
 
+  /* ============================================================
+     MODULE 7
+     ============================================================ */
+
+  /* ---------- Sui object ownership ---------- */
+  reg('suiobjects', 'Sui object ownership and execution',
+    'Choose an object’s ownership and see which execution path its update needs. The simulation also advances the object version, just like a successful mutable-object transaction.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Object kind</label><select id="so-kind"><option value="owned">Address-owned badge</option><option value="shared">Shared AMM pool</option><option value="immutable">Immutable metadata</option><option value="wrapped">Object-owned inventory item</option></select></div>
+          <div class="field"><label>Current version</label><input id="so-ver" type="number" value="4" min="1"></div>
+          <div class="field shrink"><button class="btn primary" id="so-run">Build update</button></div>
+        </div>
+        <div class="out" id="so-log"></div>`;
+      const kind = $(el, '#so-kind'), version = $(el, '#so-ver'), log = $(el, '#so-log');
+      function run() {
+        const v = Math.max(1, Math.floor(Number(version.value) || 1));
+        const k = kind.value;
+        const cfg = {
+          owned: { name: 'address-owned Badge', path: 'owned-object fast path', use: 'Alice alone controls the mutable input.', result: 'Badge level increases and ownership remains with Alice.' },
+          shared: { name: 'shared AMM pool', path: 'consensus ordering', use: 'Any trader can target the same mutable pool, so validators must agree on order.', result: 'Pool reserves update after its ordered transaction executes.' },
+          immutable: { name: 'immutable metadata', path: 'read-only input', use: 'No transaction may mutate an immutable object.', result: 'Rejected: choose an owned or shared object for an update.' },
+          wrapped: { name: 'object-owned inventory item', path: 'parent-authorised object access', use: 'The item is controlled through its parent inventory object.', result: 'The parent inventory and its child item advance together.' }
+        }[k];
+        const next = k === 'immutable' ? v : v + 1;
+        log.innerHTML =
+          `OBJECT INPUT\n  kind    ${cfg.name}\n  reference  0xBAD6…E001 @ version ${v}\n\n` +
+          `EXECUTION PATH\n  <span class="${k === 'shared' ? 'hash' : k === 'immutable' ? 'bad' : 'good'}">${cfg.path}</span>\n  ${cfg.use}\n\n` +
+          `EFFECT\n  ${cfg.result}\n` +
+          (k === 'immutable' ? '' : `  new reference  0xBAD6…E001 @ version ${next}\n\n<span class="dim">A later transaction built with version ${v} is now stale and must fetch this new version.</span>`);
+        version.value = next;
+      }
+      $(el, '#so-run').onclick = run; kind.onchange = run; run();
+    });
+
+  /* ---------- abilities and capability ---------- */
+  reg('suicap', 'Move abilities and capability checks',
+    'Toggle a type’s abilities, then try a privileged operation with and without the scarce AdminCap resource.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field shrink"><label><input id="sc-copy" type="checkbox"> copy</label></div>
+          <div class="field shrink"><label><input id="sc-drop" type="checkbox"> drop</label></div>
+          <div class="field shrink"><label><input id="sc-store" type="checkbox" checked> store</label></div>
+          <div class="field shrink"><label><input id="sc-key" type="checkbox" checked> key</label></div>
+          <div class="field shrink"><label><input id="sc-cap" type="checkbox" checked> caller supplies AdminCap</label></div>
+          <div class="field shrink"><button class="btn primary" id="sc-run">Check design</button></div>
+        </div>
+        <div class="out" id="sc-log"></div>`;
+      function checked(id) { return $(el, id).checked; }
+      function run() {
+        const copy = checked('#sc-copy'), drop = checked('#sc-drop'), store = checked('#sc-store'), key = checked('#sc-key'), cap = checked('#sc-cap');
+        const lines = [];
+        lines.push(`TYPE DECLARATION\n  public struct Ticket has ${[copy && 'copy', drop && 'drop', store && 'store', key && 'key'].filter(Boolean).join(', ') || '(no abilities)'}`);
+        lines.push(`\nASSET SAFETY\n  duplicate ticket  ${copy ? '<span class="bad">ALLOWED — unsuitable for a scarce ticket</span>' : '<span class="good">REJECTED by Move</span>'}`);
+        lines.push(`  discard ticket    ${drop ? '<span class="bad">ALLOWED — unused tickets may silently vanish</span>' : '<span class="good">REJECTED by Move</span>'}`);
+        lines.push(`  store as child    ${store ? '<span class="good">allowed</span>' : '<span class="dim">not allowed</span>'}`);
+        lines.push(`  global object     ${key ? '<span class="good">allowed (needs a UID field)</span>' : '<span class="dim">not an object</span>'}`);
+        lines.push(`\nADMIN ACTION\n  pause(treasury)  ${cap ? '<span class="good">ACCEPTED — caller proves authority with &AdminCap</span>' : '<span class="bad">REJECTED — object ID is not an authorisation check</span>'}`);
+        $(el, '#sc-log').innerHTML = lines.join('\n');
+      }
+      $$(el, 'input').forEach(i => i.onchange = run); $(el, '#sc-run').onclick = run; run();
+    });
+
+  /* ---------- programmable transaction block ---------- */
+  reg('suiptb', 'Programmable transaction block builder',
+    'Split the gas coin into payments, optionally mint a Badge, and transfer every result. The commands execute atomically in the displayed order.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Gas coin balance (MIST)</label><input id="sp-balance" type="number" value="5000000" min="0"></div>
+          <div class="field"><label>First payment (MIST)</label><input id="sp-pay1" type="number" value="1000000" min="0"></div>
+          <div class="field"><label>Second payment (MIST)</label><input id="sp-pay2" type="number" value="500000" min="0"></div>
+          <div class="field shrink"><label><input id="sp-mint" type="checkbox" checked> mint Badge</label></div>
+          <div class="field shrink"><button class="btn primary" id="sp-build">Build PTB</button></div>
+        </div>
+        <div class="out" id="sp-log"></div>`;
+      function run() {
+        const balance = Math.max(0, Math.floor(Number($(el, '#sp-balance').value) || 0));
+        const a = Math.max(0, Math.floor(Number($(el, '#sp-pay1').value) || 0));
+        const b = Math.max(0, Math.floor(Number($(el, '#sp-pay2').value) || 0));
+        const mint = $(el, '#sp-mint').checked, total = a + b;
+        if (total > balance) {
+          $(el, '#sp-log').innerHTML = `<span class="bad">BUILD FAILED.</span> splitCoins requests ${num(total)} MIST but the gas coin only has ${num(balance)} MIST. No command is signed or executed.`;
+          return;
+        }
+        const commands = [
+          `0  SplitCoins(gas, [${num(a)}, ${num(b)}])  → payment0, payment1`,
+          mint ? '1  MoveCall(workshop::badge::mint, "PTB learner")  → badge' : null,
+          `2  TransferObjects([payment0], recipientA)`,
+          `3  TransferObjects([payment1${mint ? ', badge' : ''}], recipientB)`
+        ].filter(Boolean);
+        $(el, '#sp-log').innerHTML =
+          `<span class="good">PTB READY — one signature, all-or-nothing.</span>\n\nCOMMANDS\n${commands.join('\n')}\n\nRESULTS\n  gas coin change      ${num(balance - total)} MIST\n  recipient A          ${num(a)} MIST\n  recipient B          ${num(b)} MIST${mint ? '\n  badge                newly minted object' : ''}\n\n<span class="dim">The split outputs are transaction-local values. They are never published as loose intermediate objects.</span>`;
+      }
+      $$(el, 'input').forEach(i => i.oninput = run); $(el, '#sp-build').onclick = run; run();
+    });
+
+  /* ---------- shared state ---------- */
+  reg('suishared', 'Shared coordination versus owned state',
+    'Submit scores to one shared scoreboard, or update independent user inventories. The counters make the contention difference visible without pretending to be a real network benchmark.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Player</label><select id="ss-player"><option>Alice</option><option>Bob</option><option>Carol</option></select></div>
+          <div class="field"><label>Score</label><input id="ss-score" type="number" value="10" min="0"></div>
+          <div class="field shrink"><button class="btn primary" id="ss-shared">Submit to shared board</button></div>
+          <div class="field shrink"><button class="btn ghost" id="ss-owned">Add to owned inventory</button></div>
+        </div>
+        <div class="out" id="ss-log"></div>`;
+      let high = 0, sharedWrites = 0, ownedWrites = 0, events = [];
+      function render(last) {
+        $(el, '#ss-log').innerHTML =
+          `STATE\n  shared Scoreboard high score   <span class="hash">${num(high)}</span>\n  shared mutations ordered       ${num(sharedWrites)}\n  independent owned mutations    ${num(ownedWrites)}\n\n` +
+          `${last || '<span class="dim">Choose an action to produce a transaction effect.</span>'}\n\n` +
+          `EVENTS\n${events.length ? events.slice(-4).map(e => `  ScoreSubmitted { player: ${e.player}, score: ${e.score} }`).join('\n') : '  (none yet)'}\n\n` +
+          '<span class="dim">The shared scoreboard is a deliberate coordination point. Inventory changes touch separate address-owned objects and do not contend with one another.</span>';
+      }
+      $(el, '#ss-shared').onclick = () => {
+        const player = $(el, '#ss-player').value, score = Math.max(0, Math.floor(Number($(el, '#ss-score').value) || 0));
+        high = Math.max(high, score); sharedWrites++; events.push({ player, score });
+        render(`<span class="good">SHARED OBJECT UPDATED.</span> ${player} submitted ${num(score)}; consensus orders this mutation against other scoreboard submissions.`);
+      };
+      $(el, '#ss-owned').onclick = () => {
+        const player = $(el, '#ss-player').value; ownedWrites++;
+        render(`<span class="good">OWNED OBJECT UPDATED.</span> ${player} received an inventory item; this address-owned mutation can execute independently of other players’ inventories.`);
+      };
+      render();
+    });
+
+  /* ---------- Kiosk policy ---------- */
+  reg('suikiosk', 'Kiosk transfer-policy simulator',
+    'Put an item in a Kiosk, select a transfer policy, and see the payment, policy receipt and final transfer as one flow.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Listed price (SUI)</label><input id="sk-price" type="number" value="12" min="0" step="0.1"></div>
+          <div class="field"><label>Policy</label><select id="sk-policy"><option value="free">Free transfer</option><option value="royalty">5% creator royalty</option><option value="allow">Allowlist required</option></select></div>
+          <div class="field shrink"><label><input id="sk-allowed" type="checkbox" checked> buyer is allowlisted</label></div>
+          <div class="field shrink"><button class="btn primary" id="sk-buy">Purchase through Kiosk</button></div>
+        </div>
+        <div class="out" id="sk-log"></div>`;
+      function run() {
+        const price = Math.max(0, Number($(el, '#sk-price').value) || 0);
+        const policy = $(el, '#sk-policy').value, allowed = $(el, '#sk-allowed').checked;
+        if (policy === 'allow' && !allowed) {
+          $(el, '#sk-log').innerHTML = `<span class="bad">TRANSFER NOT CONFIRMED.</span> The policy did not issue its allowlist receipt, so the Kiosk request cannot release the item. Seller and buyer balances stay unchanged.`;
+          return;
+        }
+        const royalty = policy === 'royalty' ? price * 0.05 : 0;
+        const seller = price - royalty;
+        const steps = [
+          '1  Kiosk takes the listed item into a transaction-local request',
+          `2  Buyer supplies ${price.toFixed(2)} SUI payment`,
+          policy === 'free' ? '3  Free-transfer policy records no additional rule' :
+            policy === 'royalty' ? `3  Royalty rule sends ${royalty.toFixed(2)} SUI to creator and records receipt` :
+              '3  Allowlist rule verifies buyer and records receipt',
+          '4  TransferPolicy confirms request; item moves to buyer'
+        ];
+        $(el, '#sk-log').innerHTML = `<span class="good">TRANSFER CONFIRMED.</span>\n\n${steps.join('\n')}\n\nSETTLEMENT\n  seller     ${seller.toFixed(2)} SUI\n  creator    ${royalty.toFixed(2)} SUI\n  buyer      receives the object\n\n<span class="dim">A different UI cannot skip an on-chain transfer policy. It must satisfy the same rules before confirmation.</span>`;
+      }
+      $$(el, 'input, select').forEach(i => i.oninput = run); $(el, '#sk-buy').onclick = run; run();
+    });
+
+  /* ---------- sponsored transactions ---------- */
+  reg('suisponsor', 'Sponsored-transaction policy gate',
+    'Ask a gas station to sponsor an onboarding call. Change the target or budget to see the checks that should happen before a sponsor key signs.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Move target</label><select id="sg-target"><option value="badge">workshop::badge::mint</option><option value="score">workshop::scoreboard::submit</option><option value="unknown">unknown::drain::all</option></select></div>
+          <div class="field"><label>Gas budget (MIST)</label><input id="sg-gas" type="number" value="5000000" min="0"></div>
+          <div class="field shrink"><label><input id="sg-user" type="checkbox" checked> user signed exact bytes</label></div>
+          <div class="field shrink"><button class="btn primary" id="sg-check">Request sponsorship</button></div>
+        </div>
+        <div class="out" id="sg-log"></div>`;
+      function run() {
+        const target = $(el, '#sg-target').value, gas = Math.max(0, Number($(el, '#sg-gas').value) || 0), signed = $(el, '#sg-user').checked;
+        const errors = [];
+        if (target === 'unknown') errors.push('target is not on the sponsor allowlist');
+        if (gas > 10_000_000) errors.push('gas budget exceeds 10,000,000 MIST cap');
+        if (!signed) errors.push('no valid user signature over final transaction bytes');
+        $(el, '#sg-log').innerHTML = errors.length
+          ? `<span class="bad">SPONSOR DECLINED.</span>\n\n${errors.map(x => '  • ' + x).join('\n')}\n\n<span class="dim">Nothing should reach the sponsor signing key until every policy check passes.</span>`
+          : `<span class="good">SPONSOR APPROVED.</span>\n\n  sender          user address\n  gas owner       gas station\n  target          ${target === 'badge' ? 'workshop::badge::mint' : 'workshop::scoreboard::submit'}\n  budget          ${num(gas)} MIST\n\nSIGNATURES\n  1  user signs transaction intent\n  2  sponsor signs the same final bytes\n\n<span class="dim">A changed recipient, amount or target changes the bytes and requires a fresh user signature.</span>`;
+      }
+      $$(el, 'input, select').forEach(i => i.oninput = run); $(el, '#sg-check').onclick = run; run();
+    });
+
+  /* ---------- authentication choices ---------- */
+  reg('suiauth', 'Walletless authentication threat model',
+    'Choose an onboarding approach and inspect the secret material, external dependency and recovery question it introduces.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Account approach</label><select id="sa-mode"><option value="wallet">Traditional wallet</option><option value="zklogin">zkLogin with OAuth</option><option value="passkey">WebAuthn passkey</option></select></div>
+          <div class="field shrink"><button class="btn primary" id="sa-show">Inspect flow</button></div>
+        </div>
+        <div class="out" id="sa-log"></div>`;
+      const flows = {
+        wallet: { title: 'TRADITIONAL WALLET', secrets: 'private key / seed phrase held by the wallet', dependency: 'wallet provider and the user’s backup practice', recovery: 'restore or connect another wallet; never ask your app server for a seed phrase', steps: ['wallet displays transaction', 'user signs with account key', 'client submits signature'] },
+        zklogin: { title: 'ZKLOGIN', secrets: 'ephemeral private key and privacy-sensitive user salt', dependency: 'OAuth issuer, proof generation path and client key storage', recovery: 'define salt and account-linking recovery without turning the app server into a key custodian', steps: ['OAuth login returns identity token', 'client binds token to ephemeral key and max epoch', 'proof + ephemeral signature authorise transaction'] },
+        passkey: { title: 'PASSKEY', secrets: 'WebAuthn credential private key protected by authenticator', dependency: 'authenticator, RP ID/origin checks and platform credential sync', recovery: 'link a second credential or recovery guardian before the first device is lost', steps: ['client creates a WebAuthn challenge', 'authenticator signs after local user verification', 'server verifies origin, challenge and credential'] }
+      };
+      function run() {
+        const f = flows[$(el, '#sa-mode').value];
+        $(el, '#sa-log').innerHTML = `<span class="hash">${f.title}</span>\n\nFLOW\n${f.steps.map((x, i) => `  ${i + 1}  ${x}`).join('\n')}\n\nSENSITIVE MATERIAL\n  ${f.secrets}\n\nEXTERNAL DEPENDENCY\n  ${f.dependency}\n\nRECOVERY QUESTION\n  ${f.recovery}\n\n<span class="dim">“Walletless” changes the UX, not the need for a precise custody and recovery promise.</span>`;
+      }
+      $(el, '#sa-mode').onchange = run; $(el, '#sa-show').onclick = run; run();
+    });
+
+  /* ---------- order book ---------- */
+  reg('suibook', 'Limit-order book matcher',
+    'Sweep a small ask book with a buy limit. Only asks at or below the limit may fill; any unfilled size remains the buyer’s order or is returned by the chosen execution policy.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Buy limit (SUI / token)</label><input id="sb-limit" type="number" value="10" min="0" step="0.1"></div>
+          <div class="field"><label>Wanted tokens</label><input id="sb-size" type="number" value="8" min="0" step="0.1"></div>
+          <div class="field shrink"><button class="btn primary" id="sb-match">Match order</button></div>
+        </div>
+        <div class="out" id="sb-log"></div>`;
+      const asks = [{ price: 9.2, size: 2 }, { price: 9.8, size: 4 }, { price: 10.4, size: 5 }];
+      function run() {
+        const limit = Math.max(0, Number($(el, '#sb-limit').value) || 0), wanted = Math.max(0, Number($(el, '#sb-size').value) || 0);
+        let remaining = wanted, spent = 0, fills = [];
+        asks.forEach(ask => {
+          if (ask.price > limit || remaining <= 0) return;
+          const size = Math.min(ask.size, remaining); remaining -= size; spent += size * ask.price; fills.push({ price: ask.price, size });
+        });
+        $(el, '#sb-log').innerHTML =
+          `ASK BOOK\n${asks.map(a => `  ${a.size.toFixed(1)} tokens @ ${a.price.toFixed(2)} SUI`).join('\n')}\n\n` +
+          `FILLS\n${fills.length ? fills.map(f => `  buy ${f.size.toFixed(1)} @ ${f.price.toFixed(2)} = ${(f.size * f.price).toFixed(2)} SUI`).join('\n') : '  <span class="bad">none — every ask is above the limit</span>'}\n\n` +
+          `RESULT\n  filled      ${(wanted - remaining).toFixed(1)} / ${wanted.toFixed(1)} tokens\n  spent       ${spent.toFixed(2)} SUI\n  remaining   ${remaining.toFixed(1)} tokens${remaining ? ' <span class="dim">(resting limit order or returned input)</span>' : ''}\n\n` +
+          '<span class="dim">A real PTB can place/take the order, transfer filled output and return change atomically around the shared market call.</span>';
+      }
+      $$(el, 'input').forEach(i => i.oninput = run); $(el, '#sb-match').onclick = run; run();
+    });
+
   /* ---------- export ---------- */
   global.LABS = LABS;
 })(window);

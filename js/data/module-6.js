@@ -10,7 +10,9 @@ L.push({
     'Derive and apply x·y=k including fees',
     'Compute price impact and explain why it grows non-linearly',
     'Quantify impermanent loss for a given price move',
-    'Compare constant product, stable-swap and concentrated liquidity'
+    'Compare constant product, stable-swap and concentrated liquidity',
+    'Set safe swap bounds and identify the MEV and routing trade-offs',
+    'Explain how LP shares, fees and non-standard tokens affect a pool'
   ],
   body: `
 <h3>Why not an order book?</h3>
@@ -41,6 +43,23 @@ dy     = (y · dx_eff) / (x + dx_eff)</code></pre>
 </table>
 </div>
 <p>"Impermanent" is a misleading name: it only reverses if the price returns to where it started. Withdraw at a different price and the loss is realised. LPing is profitable only when accumulated fees exceed IL — which is why correlated pairs (stablecoins, ETH/stETH) and high-volume pairs dominate.</p>
+
+<h3>Executing a swap safely</h3>
+<p>A quote is an estimate made against one particular pool state. Between signing and inclusion, other trades can change that state. A production swap therefore needs three user-supplied constraints: an exact input or exact output amount, a <code>minOut</code> (or <code>maxIn</code>) derived from the user's slippage tolerance, and a deadline. The contract must enforce all three; a friendly frontend quote is not a protection.</p>
+<pre><code>expectedOut = router quote at signing time
+minOut      = expectedOut · (1 − slippageTolerance)
+
+if actualOut &lt; minOut: revert</code></pre>
+<p>Wide slippage makes a transaction more likely to land, but grants a searcher more room to sandwich it: buy before the user, let the user trade at a worse price, then sell after. Zero slippage makes ordinary price movement cause reverts. For a large order, compare routes and split across independent pools; liquidity depth, fee tier and gas all matter. A path with one extra hop can be better when it avoids moving a shallow pool too far.</p>
+
+<div class="note warn">
+  <span class="tag">Never price collateral from a spot AMM swap</span>
+  <p>The same pool that can be moved by a large trade or flash loan is not a safe lending oracle. AMM spot prices are for execution; lending needs a robust external price or a time-weighted, sufficiently deep market price with freshness and deviation checks. This distinction prevents an entire class of oracle attacks.</p>
+</div>
+
+<h3>LP shares, fees and token reality</h3>
+<p>An LP share represents a fraction of the pool, not a fixed number of each token. On deposit, a later LP should receive shares proportional to the value they add at the current reserve ratio. On withdrawal, they receive the same fraction of <em>current</em> reserves — including fees accumulated since deposit. The first deposit is special: a tiny initial deposit can manipulate the share price, so production pools lock a minimum quantity of shares or use virtual reserves.</p>
+<p>Pool maths also assumes tokens behave like ordinary ERC-20s. Fee-on-transfer and rebasing tokens break that assumption: the amount requested from the trader may not equal the amount received by the pool, and a balance may change without a transfer. A robust integration calculates actual input from the balance delta, rejects unsupported token types where necessary, and never trusts a caller-provided amount as its accounting source.</p>
 
 <h3>The design space</h3>
 <div class="table-scroll">
@@ -209,6 +228,32 @@ impermanentLoss(0.5);  // -0.0572  ->  symmetric: down 2x hurts the same
 
 // LP profit = accumulated fees - IL. Fees scale with VOLUME, IL with the
 // SIZE OF THE PRICE MOVE. High volume plus low volatility is the good regime.`
+    },
+    {
+      lang: 'javascript', file: 'swap-guardrails.js',
+      caption: 'Turn a quote into an enforceable user limit, then compare a direct route with a two-pool route.',
+      src: `const FEE = 0.003;
+
+function amountOut(amountIn, reserveIn, reserveOut) {
+  const effectiveIn = amountIn * (1 - FEE);
+  return (effectiveIn * reserveOut) / (reserveIn + effectiveIn);
+}
+
+// The UI sets this from a quote; the contract enforces it as minOut.
+function minAmountOut(quotedOut, slippageBps) {
+  return quotedOut * (10_000 - slippageBps) / 10_000;
+}
+
+const direct = amountOut(10, 100, 200_000);       // ETH -> USDC
+minAmountOut(direct, 50);                         // 0.5% tolerance
+
+// A router evaluates the output of every hop, not their spot prices.
+const wethToDai = amountOut(10, 2_000, 4_000_000);
+const daiToUsdc = amountOut(wethToDai, 5_000_000, 5_000_000);
+
+// Choose the path with the largest output AFTER fees, then submit it with
+// minOut and a deadline. Do not use a quote as the final amount.
+Math.max(direct, daiToUsdc);`
     }
   ],
   lab: 'amm',
@@ -245,18 +290,32 @@ impermanentLoss(0.5);  // -0.0572  ->  symmetric: down 2x hurts the same
       ],
       answer: 1,
       why: 'Concentration multiplies capital efficiency inside the range and gives you nothing outside it. It also amplifies IL within the range. Passive LPing becomes an actively managed position.'
+    },
+    {
+      q: 'Why must a swap transaction include a minOut rather than trusting the frontend quote?',
+      options: [
+        'The quote is cryptographically signed',
+        'Pool state can change before inclusion; minOut limits normal price movement and the value a sandwich can extract',
+        'It saves gas',
+        'It lets the pool waive fees'
+      ],
+      answer: 1,
+      why: "A quote is made from a past state. Other transactions can execute first, or deliberately move the price around yours. minOut turns the user's stated tolerance into an on-chain condition; if it cannot be met, the transaction reverts."
     }
   ],
   tasks: [
     'Use the lab to swap against a pool and record price impact at 1%, 10% and 50% of pool depth.',
     'Compute IL for a 3x price move by hand, then verify with the formula.',
     'Deploy MiniAMM locally, seed it, and write a fuzz test asserting k never decreases across any swap.',
-    'Model a concentrated position between 1,800 and 2,200 and calculate its efficiency multiplier versus full range.'
+    'Model a concentrated position between 1,800 and 2,200 and calculate its efficiency multiplier versus full range.',
+    'Quote one swap through a direct pool and a two-hop route; set a 50 bps minOut and explain the trade-off.',
+    'List every assumption MiniAMM makes about token behaviour, then decide whether to support or reject fee-on-transfer and rebasing tokens.'
   ],
   resources: [
     { type: 'read', title: 'Uniswap V2 whitepaper', url: 'https://uniswap.org/whitepaper.pdf' },
     { type: 'read', title: 'Uniswap V3 whitepaper (concentrated liquidity)', url: 'https://uniswap.org/whitepaper-v3.pdf' },
-    { type: 'read', title: 'Curve StableSwap paper', url: 'https://curve.fi/files/stableswap-paper.pdf' }
+    { type: 'read', title: 'Curve StableSwap paper', url: 'https://curve.fi/files/stableswap-paper.pdf' },
+    { type: 'docs', title: 'Uniswap — smart order router concepts', url: 'https://docs.uniswap.org/sdk/v3/guides/swaps/quoting' }
   ]
 });
 
@@ -269,7 +328,9 @@ L.push({
     'Compute a health factor and the exact liquidation price',
     'Explain utilisation-based interest rate models',
     'Describe the liquidation auction and why the bonus exists',
-    'Compare collateralised, algorithmic and fiat-backed stablecoins'
+    'Compare collateralised, algorithmic and fiat-backed stablecoins',
+    'Evaluate an oracle for manipulation, staleness and decimal errors',
+    'Trace how interest accrual and bad debt change a lending market'
   ],
   body: `
 <h3>Credit without identity</h3>
@@ -284,18 +345,36 @@ liquidation price = 10000 / (10 · 0.825) = $1,212</code></pre>
 
 <h3>Interest rates from utilisation</h3>
 <p>Rates are algorithmic, not set by anyone. Utilisation <code>U = borrowed / supplied</code> drives a kinked curve:</p>
-<pre><code>U ≤ kink:   rate = base + (U / kink) · slope1          // gentle
-U &gt; kink:   rate = base + slope1 + ((U − kink)/(1 − kink)) · slope2   // steep</code></pre>
+<pre><code>U ≤ kink: rate = base + (U / kink) · slope1
+U &gt; kink: rate = base + slope1 + ((U − kink) / (1 − kink)) · slope2</code></pre>
 <p>Below the kink (typically 80%) borrowing stays cheap. Above it the rate climbs violently — often to 100%+ APR at full utilisation. That spike is a control mechanism: it forces repayment and attracts new deposits so lenders can always withdraw. A protocol at 100% utilisation with a flat curve has effectively frozen its lenders' funds.</p>
+
+<h3>Debt is an index, not a daily loop</h3>
+<p>A contract cannot update every borrower every block. Instead it keeps a global borrow index that compounds whenever the market is touched, then stores each account's scaled debt. This gives every borrower the same rate without iterating over accounts:</p>
+<pre><code>borrowIndex(t) = borrowIndex(t₀) · (1 + rate · elapsedSeconds / year)
+actualDebt(user) = scaledDebt(user) · borrowIndex / userIndexAtLastUpdate</code></pre>
+<p>On borrow, repay, or liquidation, the protocol first accrues the global index, realises that account's accrued debt, then changes its principal. The supply side works the same way, after applying the reserve factor. Interest is not free yield: it is borrower debt transferred to suppliers, minus reserves for losses and protocol operations.</p>
 
 <h3>Liquidation</h3>
 <p>Liquidators repay part of the debt and receive collateral at a discount — typically 5-10%. That bonus is not a gift; it is the payment for a service the protocol cannot perform itself. Without a profitable incentive, underwater positions sit unliquidated and the shortfall becomes protocol bad debt.</p>
 <p>Liquidation is intensely competitive MEV: bots monitor every position, and the moment HF drops below 1 they race to submit. Most use a flash loan, so they need no capital at all.</p>
 
+<h3>Oracle risk is solvency risk</h3>
+<p>The health factor is only as correct as its prices. A protocol must specify which markets it trusts, how the feed is normalised to a shared decimal scale, how old a price may be, and what happens during an outage. Reading a one-block AMM spot price makes flash-loan manipulation cheap: inflate collateral for one transaction, borrow more than its real value, then let the price return.</p>
+<ul>
+  <li><strong>External feeds</strong> aggregate multiple venues, but need heartbeat and stale-price checks.</li>
+  <li><strong>TWAPs</strong> resist a one-block move, but can still be moved gradually and fail in illiquid markets.</li>
+  <li><strong>Caps, isolation mode and conservative thresholds</strong> limit the blast radius when any feed or collateral assumption is wrong.</li>
+</ul>
+<p>An oracle answer of zero, a negative answer, an unexpected decimal count, or an answer older than the market's heartbeat should halt risk-increasing actions. “Fail open” is an insolvency policy.</p>
+
 <div class="note warn">
   <span class="tag">Cascade risk</span>
   <p>Price falls, positions liquidate, liquidators dump collateral on the market, price falls further, more positions liquidate. Add thin liquidity and the spiral outruns the oracle. This is how protocols end up with bad debt despite being "overcollateralised" — and why parameters (thresholds, caps, bonuses) are risk management, not configuration.</p>
 </div>
+
+<h3>Bad debt and the recovery waterfall</h3>
+<p>Liquidation is not guaranteed to restore health. If collateral falls below the debt before a liquidator can sell it, or an oracle updates late, the seized collateral may be worth less than the repayment. The remainder is bad debt. Mature protocols decide in advance who absorbs it: protocol reserves first, then an insurance or safety module, and finally suppliers if the loss exceeds those buffers. Governance tokens do not make a loss disappear; they only decide who recapitalises it and on what terms.</p>
 
 <h3>Stablecoins</h3>
 <div class="table-scroll">
@@ -310,6 +389,9 @@ U &gt; kink:   rate = base + slope1 + ((U − kink)/(1 − kink)) · slope2   //
 </table>
 </div>
 <p>Terra/UST is the reference lesson: the mechanism only worked while demand grew. When redemptions exceeded what the peg arbitrage could absorb, minting LUNA to defend the peg crashed LUNA, which destroyed the backing, which broke the peg further. Backing that is denominated in your own token is not backing.</p>
+
+<h3>How a peg is defended</h3>
+<p>A fiat-backed stablecoin relies on redemption: if it trades below $1, an authorised participant buys it cheaply and redeems it for $1 of reserves; above $1, they mint against dollars and sell. That mechanism is only as strong as redemption access, reserve quality and confidence in the issuer. A crypto-backed stablecoin relies on collateral auctions, liquidation capacity and a conservative collateral ratio. In both cases, “$1” is an operational promise with a balance sheet behind it, not a property created by the token contract.</p>
 `,
   code: [
     {
@@ -447,6 +529,47 @@ borrowRate(1.00);   // 79.0%  lenders cannot withdraw; rate must be brutal
 // Supply rate is the borrow rate scaled by utilisation, minus the reserve cut:
 const supplyRate = (u, reserveFactor = 0.10) =>
   borrowRate(u) * u * (1 - reserveFactor);`
+    },
+    {
+      lang: 'solidity', file: 'OracleGuard.sol',
+      caption: 'The checks around a price feed are as important as the price itself: reject invalid, stale and wrongly scaled answers before lending against them.',
+      src: `// SPDX-License-Identifier: MIT
+pragma solidity 0.8.24;
+
+interface AggregatorV3Interface {
+    function decimals() external view returns (uint8);
+    function latestRoundData() external view returns (
+        uint80 roundId, int256 answer, uint256 startedAt,
+        uint256 updatedAt, uint80 answeredInRound
+    );
+}
+
+contract OracleGuard {
+    AggregatorV3Interface public immutable feed;
+    uint256 public immutable maxAge;
+
+    error BadPrice();
+    error StalePrice();
+
+    constructor(AggregatorV3Interface _feed, uint256 _maxAge) {
+        feed = _feed;
+        maxAge = _maxAge;
+    }
+
+    /// Returns USD price scaled to 1e18. A production integration also
+    /// documents the feed, asset, denomination and fallback policy.
+    function price18() external view returns (uint256) {
+        (, int256 answer,, uint256 updatedAt,) = feed.latestRoundData();
+        if (answer <= 0 || updatedAt == 0) revert BadPrice();
+        if (block.timestamp - updatedAt > maxAge) revert StalePrice();
+
+        uint8 decimals = feed.decimals();
+        uint256 raw = uint256(answer);
+        if (decimals == 18) return raw;
+        if (decimals < 18) return raw * 10 ** (18 - decimals);
+        return raw / 10 ** (decimals - 18);
+    }
+}`
     }
   ],
   lab: 'lending',
@@ -478,18 +601,32 @@ const supplyRate = (u, reserveFactor = 0.10) =>
       ],
       answer: 1,
       why: 'Liquidators take gas cost, price risk and competition risk. The 5-10% discount compensates them. Set it too low and nobody liquidates; too high and borrowers are needlessly penalised and cascades worsen.'
+    },
+    {
+      q: 'Why is a single AMM spot price unsafe as a lending oracle?',
+      options: [
+        'AMMs cannot quote prices',
+        'A trader can temporarily move a shallow pool, borrow against the inflated collateral value, then let the price return',
+        'It costs more gas than an external feed',
+        'AMM prices are always too low'
+      ],
+      answer: 1,
+      why: 'A lending protocol turns an oracle price into borrowable value. If that price can be manipulated for one transaction, a flash loan can manufacture collateral value long enough to withdraw real assets. Robust feeds, TWAP windows and risk caps each address different parts of the problem.'
     }
   ],
   tasks: [
     'Use the lab to build a position, drop the price, and liquidate it. Record the liquidator profit.',
     'Compute the liquidation price for three different LTVs and explain the trade-off to a borrower.',
     'Plot the kinked rate curve from 0 to 100% utilisation and mark the kink.',
-    'Write the failure sequence of UST in five steps, naming the reflexive loop.'
+    'Write the failure sequence of UST in five steps, naming the reflexive loop.',
+    'Implement a borrow index and prove with a test that debt grows by the expected amount after 30 days.',
+    'Choose a collateral asset, define a price-feed heartbeat and decimal scale, then write the conditions under which borrowing must pause.'
   ],
   resources: [
     { type: 'docs', title: 'Aave V3 technical paper', url: 'https://github.com/aave/aave-v3-core' },
     { type: 'docs', title: 'Compound III documentation', url: 'https://docs.compound.finance/' },
-    { type: 'read', title: 'MakerDAO / Sky documentation', url: 'https://docs.makerdao.com/' }
+    { type: 'read', title: 'MakerDAO / Sky documentation', url: 'https://docs.makerdao.com/' },
+    { type: 'docs', title: 'Chainlink Data Feeds — using latestRoundData safely', url: 'https://docs.chain.link/data-feeds/api-reference' }
   ]
 });
 

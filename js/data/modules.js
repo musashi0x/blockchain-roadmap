@@ -4,7 +4,7 @@ window.ROADMAP = {
   meta: {
     title: 'Blockchain Roadmap',
     tagline: 'From hash functions to deployed DeFi contracts, one session at a time.',
-    totalHours: 31
+    totalHours: 39
   },
 
   modules: [
@@ -49,6 +49,13 @@ window.ROADMAP = {
       color: '#e879f9',
       summary: 'AMMs, lending, oracles, rollups, bridges, zero-knowledge — then you ship your own protocol.',
       outcome: 'You can design a multi-contract protocol and defend its economic and scaling choices.'
+    },
+    {
+      id: 7,
+      name: 'Sui & Move',
+      color: '#6cb7ff',
+      summary: 'An object-centric chain and a resource-oriented language: own assets, compose transaction blocks, design shared state, and integrate Sui’s application primitives.',
+      outcome: 'You can model assets as Sui objects, write and test a small Move package, and integrate Kiosk, sponsorship, walletless auth and on-chain liquidity safely.'
     }
   ],
 

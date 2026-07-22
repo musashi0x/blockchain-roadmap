@@ -3,7 +3,7 @@
 
    Depends on (loaded before this file):
      window.CL       js/lib/crypto-lite.js
-     window.ROADMAP  js/data/modules.js + module-1..6.js
+     window.ROADMAP  js/data/modules.js + module-1..7.js
      window.LABS     js/playground.js
 
    No build step, no modules, no network. Runs from file://.
@@ -74,11 +74,12 @@
     'do', 'break', 'continue', 'try', 'catch', 'throw', 'switch', 'case', 'default',
     'mapping', 'struct', 'enum', 'type', 'let', 'const', 'var', 'async', 'await',
     'class', 'extends', 'export', 'this', 'super', 'null', 'undefined', 'true', 'false',
-    'typeof', 'instanceof', 'in', 'of', 'template', 'signal', 'component', 'echo', 'set'
+    'typeof', 'instanceof', 'in', 'of', 'template', 'signal', 'component', 'echo', 'set',
+    'module', 'fun', 'entry', 'has', 'copy', 'drop', 'store', 'key', 'mut', 'acquires'
   ].join('|');
 
   const TY = [
-    'u?int\\d*', 'address', 'bool', 'bytes\\d*', 'string', 'byte', 'void', 'any',
+    'u?int\\d*', 'u8', 'u16', 'u32', 'u64', 'u128', 'u256', 'address', 'bool', 'bytes\\d*', 'string', 'byte', 'vector', 'void', 'any',
     'number', 'boolean', 'bigint', 'Promise', 'Uint8Array', 'BigInt', 'Math', 'JSON',
     'console', 'msg', 'block', 'tx', 'abi', 'vm', 'wei', 'gwei', 'ether'
   ].join('|');
@@ -270,7 +271,7 @@
     main.appendChild(hero);
 
     if (window.DIA) {
-      main.appendChild(el('div', 'section-head', '<h2>The route</h2><span class="hint">six modules, in order</span>'));
+      main.appendChild(el('div', 'section-head', '<h2>The route</h2><span class="hint">' + modules.length + ' modules, in order</span>'));
       main.appendChild(diagramPanel([DIA.home()]));
     }
 
@@ -334,7 +335,10 @@
   /* window.DIA is optional: drop js/diagrams.js and the page still renders. */
   function figure(d) {
     return '<figure class="dia-fig">' +
-      (d.title ? '<p class="dia-title">' + esc(d.title) + '</p>' : '') +
+      '<div class="dia-head">' +
+        (d.title ? '<p class="dia-title">' + esc(d.title) + '</p>' : '') +
+        '<button class="dia-replay" type="button" title="Replay the animation">▶ replay</button>' +
+      '</div>' +
       '<div class="dia-scroll" role="img" aria-label="' + attr(d.title || 'diagram') + '">' + d.svg + '</div>' +
       (d.cap ? '<figcaption class="dia-cap">' + esc(d.cap) + '</figcaption>' : '') +
       '</figure>';
@@ -344,6 +348,19 @@
     const p = el('section', 'panel');
     p.innerHTML = '<h2 data-jp="図解">' + (list.length > 1 ? 'Diagrams' : 'Diagram') + '</h2>' +
       list.map(figure).join('');
+
+    p.addEventListener('click', e => {
+      const btn = e.target.closest('.dia-replay');
+      if (!btn) return;
+      const svg = btn.closest('.dia-fig').querySelector('svg.dia');
+      if (svg && DIA.replay) DIA.replay(svg);
+    });
+
+    /* the panel is appended by the caller in this same task, so by the next
+       task it is in the document and measurable. Not requestAnimationFrame:
+       that never fires while the tab is hidden, and the diagrams would then
+       never be prepared at all. */
+    setTimeout(() => { if (window.DIA && DIA.animate) DIA.animate(p); }, 0);
     return p;
   }
 
