@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blockchain Roadmap — 26 Lessons with Live Examples</title>
+<meta name="description" content="A complete, hands-on blockchain learning roadmap: cryptography, Bitcoin, Ethereum, Solidity, dApps, security, DeFi and L2s — with runnable in-browser examples.">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛓️</text></svg>">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button id="navToggle" class="icon-btn" aria-label="Toggle navigation" aria-expanded="false">
+    <span class="burger"></span>
+  </button>
+
+  <a class="brand" href="#/">
+    <span class="brand-mark">⛓</span>
+    <span class="brand-text">
+      <strong>Blockchain Roadmap</strong>
+      <em>26 lessons · 6 modules · live labs</em>
+    </span>
+  </a>
+
+  <div class="topbar-progress" title="Overall progress">
+    <div class="bar"><span id="globalBarFill"></span></div>
+    <span id="globalBarLabel" class="mono">0%</span>
+  </div>
+
+  <div class="topbar-actions">
+    <button id="themeBtn" class="icon-btn" aria-label="Toggle light/dark theme" title="Toggle theme">◐</button>
+    <button id="resetBtn" class="icon-btn" aria-label="Reset progress" title="Reset progress">⟲</button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside id="sidebar" class="sidebar" aria-label="Course navigation">
+    <div class="search-wrap">
+      <input id="search" type="search" placeholder="Search lessons…  (/)" autocomplete="off" aria-label="Search lessons">
+    </div>
+    <a class="nav-home" href="#/">◈ Roadmap overview</a>
+    <nav id="nav" class="nav"></nav>
+    <footer class="sidebar-foot">
+      <p class="mono">Progress saved in this browser (localStorage).</p>
+    </footer>
+  </aside>
+
+  <div id="scrim" class="scrim" hidden></div>
+
+  <main id="main" class="main" tabindex="-1"></main>
+
+</div>
+
+<!-- crypto primitives implemented from scratch, no network, no secure-context needed -->
+<script src="js/lib/crypto-lite.js"></script>
+
+<!-- curriculum data -->
+<script src="js/data/modules.js"></script>
+<script src="js/data/module-1.js"></script>
+<script src="js/data/module-2.js"></script>
+<script src="js/data/module-3.js"></script>
+<script src="js/data/module-4.js"></script>
+<script src="js/data/module-5.js"></script>
+<script src="js/data/module-6.js"></script>
+
+<!-- interactive labs -->
+<script src="js/playground.js"></script>
+
+<!-- app shell -->
+<script src="js/app.js"></script>
+</body>
+</html>
