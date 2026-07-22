@@ -1,7 +1,7 @@
 # Blockchain Roadmap
 
 A complete, self-contained blockchain learning course: **26 lessons across 6 modules**, one lesson per
-session, each with worked code examples and a live lab that runs in the page.
+session, each with a line diagram, worked code examples and a live lab that runs in the page.
 
 Open `index.html` in a browser. That is the whole install.
 
@@ -25,6 +25,7 @@ Every lesson contains:
 
 - **objectives** — what you can do afterwards, not what you will have read
 - **explanation** — the mechanics, including the failure modes
+- **a line diagram** — the same mechanics as a picture, drawn in SVG
 - **worked code** — Solidity, TypeScript, shell, all copyable
 - **a live lab** — 26 of them, listed below
 - **a quiz** — with an explanation on every answer, right or wrong
@@ -98,15 +99,32 @@ The header buttons toggle the theme (`◐`) and reset progress (`⟲`).
 
 ```
 index.html              page shell and script load order
-css/style.css           all styling; light and dark via [data-theme]
+css/style.css           layout and components; light and dark via [data-theme]
+css/anime.css           the anime skin — palette, glow, brackets, diagram styling
 js/lib/crypto-lite.js   SHA-256, Keccak-256, secp256k1, EIP-55 — from scratch
 js/data/modules.js      module metadata + the empty lessons array
 js/data/module-1..6.js  the 26 lessons
+js/diagrams.js          window.DIA — 30 inline-SVG line diagrams
 js/playground.js        window.LABS — all 26 interactive labs
 js/app.js               router, rendering, progress, theme, search, highlighter
 ```
 
-Load order matters: `crypto-lite` → `modules` → `module-1..6` → `playground` → `app`.
+Load order matters: `crypto-lite` → `modules` → `module-1..6` → `diagrams` → `playground` → `app`.
+`anime.css` loads after `style.css` and only overrides presentation; delete it and the app still works.
+
+## The diagrams
+
+Every lesson gets a **Diagram** panel between the explanation and the code — 29 of them, plus a
+roadmap overview on the home page. They are hand-laid inline SVG built by a small drawing kit in
+`js/diagrams.js` (`box`, `arr`, `elb`, `cur`, `flow`, `life`, `diamond`, `cyl`, …).
+
+Nothing is rasterised and nothing is fetched. Strokes and fills read CSS custom properties, so the
+diagrams re-theme with the page and stay sharp at any zoom. Arrowheads are real polygons rather than
+SVG `<marker>`s, because a marker cannot portably inherit the colour of the line that references it.
+On narrow screens each diagram scrolls sideways inside its figure instead of shrinking the labels.
+
+Add one by calling `add(lessonId, title, caption, width, height, svgBody)` in `js/diagrams.js`; the
+lesson picks it up automatically.
 
 ### Why the crypto is hand-rolled
 

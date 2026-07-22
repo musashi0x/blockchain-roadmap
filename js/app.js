@@ -269,6 +269,11 @@
       '</div>';
     main.appendChild(hero);
 
+    if (window.DIA) {
+      main.appendChild(el('div', 'section-head', '<h2>The route</h2><span class="hint">six modules, in order</span>'));
+      main.appendChild(diagramPanel([DIA.home()]));
+    }
+
     main.appendChild(el('div', 'section-head',
       '<h2>How to use this roadmap</h2>'));
 
@@ -324,6 +329,24 @@
 
   function stat(b, s) { return '<div class="stat"><b>' + b + '</b><span>' + s + '</span></div>'; }
 
+  /* ---------------- diagrams ---------------- */
+
+  /* window.DIA is optional: drop js/diagrams.js and the page still renders. */
+  function figure(d) {
+    return '<figure class="dia-fig">' +
+      (d.title ? '<p class="dia-title">' + esc(d.title) + '</p>' : '') +
+      '<div class="dia-scroll" role="img" aria-label="' + attr(d.title || 'diagram') + '">' + d.svg + '</div>' +
+      (d.cap ? '<figcaption class="dia-cap">' + esc(d.cap) + '</figcaption>' : '') +
+      '</figure>';
+  }
+
+  function diagramPanel(list) {
+    const p = el('section', 'panel');
+    p.innerHTML = '<h2 data-jp="図解">' + (list.length > 1 ? 'Diagrams' : 'Diagram') + '</h2>' +
+      list.map(figure).join('');
+    return p;
+  }
+
   function nextUp() {
     return lessons.find(l => !isDone(l.id)) || lessons[lessons.length - 1];
   }
@@ -355,14 +378,14 @@
     /* objectives */
     if (l.objectives && l.objectives.length) {
       const p = el('section', 'panel');
-      p.innerHTML = '<h2>By the end of this session</h2><ul class="goals">' +
+      p.innerHTML = '<h2 data-jp="目標">By the end of this session</h2><ul class="goals">' +
         l.objectives.map(o => '<li>' + o + '</li>').join('') + '</ul>';
       main.appendChild(p);
     }
 
     /* body */
     const body = el('section', 'panel');
-    body.innerHTML = '<h2>Lesson</h2><div class="prose">' + l.body + '</div>';
+    body.innerHTML = '<h2 data-jp="レッスン">Lesson</h2><div class="prose">' + l.body + '</div>';
     main.appendChild(body);
     body.querySelectorAll('table').forEach(t => {
       if (t.parentNode.classList.contains('table-scroll')) return;
@@ -371,10 +394,14 @@
       wrap.appendChild(t);
     });
 
+    /* diagrams — the picture of what the lesson just described */
+    const dias = window.DIA ? DIA.get(l.id) : [];
+    if (dias.length) main.appendChild(diagramPanel(dias));
+
     /* code */
     if (l.code && l.code.length) {
       const p = el('section', 'panel');
-      p.innerHTML = '<h2>Worked examples</h2>';
+      p.innerHTML = '<h2 data-jp="コード">Worked examples</h2>';
       l.code.forEach(c => p.appendChild(codeBlock(c)));
       main.appendChild(p);
     }
@@ -384,7 +411,7 @@
       const lab = LABS[l.lab];
       const p = el('section', 'panel lab');
       if (lab) {
-        p.innerHTML = '<h2>Lab · ' + esc(lab.title) + '</h2>' +
+        p.innerHTML = '<h2 data-jp="ラボ">Lab · ' + esc(lab.title) + '</h2>' +
           '<p class="lab-desc">' + lab.desc + '</p>';
         const mount = el('div');
         p.appendChild(mount);
@@ -396,7 +423,7 @@
           if (window.console) console.error('lab "' + l.lab + '" failed', e);
         }
       } else {
-        p.innerHTML = '<h2>Lab</h2><div class="empty">No lab registered for key "' + esc(l.lab) + '".</div>';
+        p.innerHTML = '<h2 data-jp="ラボ">Lab</h2><div class="empty">No lab registered for key "' + esc(l.lab) + '".</div>';
         main.appendChild(p);
       }
     }
@@ -404,7 +431,7 @@
     /* quiz */
     if (l.quiz && l.quiz.length) {
       const p = el('section', 'panel');
-      p.innerHTML = '<h2>Check yourself</h2>';
+      p.innerHTML = '<h2 data-jp="クイズ">Check yourself</h2>';
       l.quiz.forEach((q, qi) => {
         const box = el('div', 'quiz-q');
         box.innerHTML =
@@ -435,7 +462,7 @@
     /* exercises */
     if (l.tasks && l.tasks.length) {
       const p = el('section', 'panel');
-      p.innerHTML = '<h2>Exercises</h2><ol class="tasks">' +
+      p.innerHTML = '<h2 data-jp="演習">Exercises</h2><ol class="tasks">' +
         l.tasks.map(t => '<li>' + t + '</li>').join('') + '</ol>';
       main.appendChild(p);
     }
@@ -443,7 +470,7 @@
     /* resources */
     if (l.resources && l.resources.length) {
       const p = el('section', 'panel');
-      p.innerHTML = '<h2>Go deeper</h2><ul class="reslist">' +
+      p.innerHTML = '<h2 data-jp="資料">Go deeper</h2><ul class="reslist">' +
         l.resources.map(r =>
           '<li><a href="' + attr(r.url) + '" target="_blank" rel="noopener noreferrer">' +
           '<span class="rt">' + esc(r.type) + '</span><span>' + esc(r.title) + '</span></a></li>').join('') +

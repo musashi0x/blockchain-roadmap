@@ -1,0 +1,447 @@
+/* ============================================================
+   anime.css — cyber-anime HUD skin.
+
+   Loaded AFTER style.css. Everything here is presentation only:
+   layout, ids and class contracts from style.css are untouched,
+   so the app keeps working if this file is removed.
+   ============================================================ */
+
+/* ---------- palette ---------- */
+:root {
+  --bg:          #070a14;
+  --bg-elev:     #0e1326;
+  --bg-elev-2:   #151c36;
+  --bg-code:     #05070f;
+  --border:      #2a3566;
+  --border-soft: #1b2445;
+  --text:        #e6ecff;
+  --text-dim:    #97a6d4;
+  --text-faint:  #6a7ab0;
+
+  --accent:      #ff4d9d;   /* hot magenta   — primary   */
+  --accent-2:    #46f0e0;   /* aqua          — secondary */
+  --accent-3:    #ffd166;   /* amber         — highlight */
+  --accent-4:    #a78bfa;   /* lilac                     */
+  --ok:          #5ff2a8;
+  --warn:        #ffd166;
+  --err:         #ff6b8b;
+
+  --glow:        0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+  --glow-2:      0 0 14px color-mix(in srgb, var(--accent-2) 55%, transparent);
+  --shadow:      0 14px 44px rgba(0, 0, 0, .55);
+
+  --d-line:      #5f74bd;
+  --d-fill:      color-mix(in srgb, var(--accent-4) 9%, transparent);
+  --radius:      13px;
+}
+
+[data-theme="light"] {
+  --bg:          #f3f5ff;
+  --bg-elev:     #ffffff;
+  --bg-elev-2:   #eaeefc;
+  --bg-code:     #0a0f1f;
+  --border:      #c9d2f2;
+  --border-soft: #dfe5fa;
+  --text:        #171c33;
+  --text-dim:    #4d5782;
+  --text-faint:  #7b85ad;
+
+  --accent:      #e0348a;
+  --accent-2:    #0aa5a0;
+  --accent-3:    #d99400;
+  --accent-4:    #7c5cf0;
+  --ok:          #12a86a;
+  --err:         #e03b5c;
+
+  --glow:        0 0 12px color-mix(in srgb, var(--accent) 26%, transparent);
+  --glow-2:      0 0 12px color-mix(in srgb, var(--accent-2) 26%, transparent);
+  --shadow:      0 10px 30px rgba(40, 50, 110, .12);
+
+  --d-line:      #7885c4;
+  --d-fill:      color-mix(in srgb, var(--accent-4) 8%, transparent);
+}
+
+/* ---------- animated backdrop ---------- */
+body::before {
+  content: ""; position: fixed; inset: -20vh -10vw; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(46vw 46vw at 12% 4%,  color-mix(in srgb, var(--accent)   22%, transparent), transparent 62%),
+    radial-gradient(42vw 42vw at 88% 12%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 60%),
+    radial-gradient(52vw 52vw at 50% 92%, color-mix(in srgb, var(--accent-4) 16%, transparent), transparent 64%);
+  filter: blur(18px);
+  animation: drift 26s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  0%   { transform: translate3d(0, 0, 0)         scale(1); }
+  100% { transform: translate3d(-3vw, 2vh, 0)    scale(1.08); }
+}
+
+/* scanlines + fine grid, the classic mecha-HUD overlay */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, transparent 1px 3px),
+    linear-gradient(color-mix(in srgb, var(--border-soft) 55%, transparent) 1px, transparent 1px) 0 0 / 100% 46px,
+    linear-gradient(90deg, color-mix(in srgb, var(--border-soft) 55%, transparent) 1px, transparent 1px) 0 0 / 46px 100%;
+  mask-image: radial-gradient(120vw 100vh at 50% 0%, #000 20%, transparent 88%);
+  opacity: .5;
+}
+[data-theme="light"] body::after { opacity: .34; }
+
+/* ---------- topbar ---------- */
+.topbar {
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(16px) saturate(150%);
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent) 1;
+  box-shadow: 0 1px 22px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.brand-mark {
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 26%, 100% 74%, 50% 100%, 0 74%, 0 26%);
+  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+  box-shadow: var(--glow);
+  font-size: 15px;
+}
+.brand-text strong {
+  letter-spacing: .1em; text-transform: uppercase; font-size: 13.5px;
+  background: linear-gradient(92deg, var(--text), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.brand-text em::before { content: "ブロックチェーン · "; opacity: .6; }
+
+.topbar-progress .bar {
+  border-radius: 0; clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
+  border-color: var(--border);
+}
+.topbar-progress .bar span {
+  border-radius: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-3), var(--accent-2));
+  box-shadow: var(--glow);
+}
+#globalBarLabel { font-family: var(--mono); letter-spacing: .05em; color: var(--accent-2); }
+
+.icon-btn {
+  border-radius: 0; clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+  background: var(--bg-elev-2);
+}
+.icon-btn:hover { color: var(--accent-2); box-shadow: var(--glow-2); }
+
+/* ---------- sidebar ---------- */
+.sidebar { background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(8px); }
+
+#search {
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+  font-family: var(--mono); font-size: 12.6px;
+}
+#search:focus { outline: none; border-color: var(--accent-2); box-shadow: var(--glow-2); }
+
+.nav-module > summary { color: var(--text-dim); }
+.nav-module > summary::after {
+  content: ""; flex: 1 1 auto; height: 1px; margin-left: 2px;
+  background: repeating-linear-gradient(90deg, var(--border) 0 4px, transparent 4px 8px);
+}
+.nav-module .m-dot {
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  width: 10px; height: 10px; flex-basis: 10px;
+  box-shadow: 0 0 9px currentColor;
+}
+.nav-module .m-count { flex: 0 0 auto; color: var(--accent-2); }
+
+.nav-list a { border-radius: 0; border-left-width: 3px; }
+.nav-list a.active {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 26%, transparent), transparent);
+  border-left-color: var(--accent);
+  box-shadow: -1px 0 16px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.nav-list a.active .t { text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent); }
+.nav-list .tick { border-radius: 0; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.nav-list a.done .tick { box-shadow: 0 0 10px var(--ok); color: transparent; }
+.nav-home { border-radius: 0; letter-spacing: .04em; }
+
+/* ---------- hero ---------- */
+.hero {
+  position: relative; overflow: hidden; border-color: transparent;
+  background:
+    linear-gradient(var(--bg-elev), var(--bg-elev)) padding-box,
+    linear-gradient(120deg, var(--accent), var(--accent-4), var(--accent-2)) border-box;
+  border: 1px solid transparent;
+  box-shadow: var(--shadow), 0 0 44px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+/* speed lines */
+.hero::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(74deg,
+    color-mix(in srgb, var(--accent-2) 20%, transparent) 0 2px, transparent 2px 26px);
+  mask-image: linear-gradient(100deg, #000, transparent 62%);
+  opacity: .5;
+}
+/* oversized katakana watermark */
+.hero::after {
+  content: "ブロックチェーン";
+  position: absolute; right: -2%; bottom: -34%; pointer-events: none;
+  font-size: clamp(60px, 12vw, 132px); font-weight: 800; letter-spacing: .04em;
+  color: color-mix(in srgb, var(--accent-2) 12%, transparent);
+  white-space: nowrap;
+}
+.hero > * { position: relative; z-index: 1; }
+.hero h1 {
+  text-transform: uppercase; letter-spacing: .01em; font-weight: 800;
+  background: linear-gradient(96deg, #fff 8%, var(--accent-2) 46%, var(--accent) 96%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 22px color-mix(in srgb, var(--accent) 34%, transparent));
+}
+[data-theme="light"] .hero h1 {
+  background: linear-gradient(96deg, var(--text) 8%, var(--accent-2) 52%, var(--accent) 96%);
+  -webkit-background-clip: text; background-clip: text;
+}
+
+.stat {
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  border-color: color-mix(in srgb, var(--accent-2) 34%, transparent);
+}
+.stat b { color: var(--accent-2); text-shadow: var(--glow-2); }
+.stat span { color: var(--text-faint); }
+
+/* ---------- buttons ---------- */
+.btn {
+  border-radius: 0; letter-spacing: .05em; text-transform: uppercase; font-size: 12.6px;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+.btn.sm { clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px)); }
+.btn.primary {
+  background: linear-gradient(112deg, var(--accent), var(--accent-4) 55%, var(--accent-2));
+  box-shadow: var(--glow);
+}
+.btn.primary:hover { box-shadow: 0 0 26px color-mix(in srgb, var(--accent) 75%, transparent); }
+.btn:hover { border-color: var(--accent-2); }
+.btn.ghost:hover { box-shadow: var(--glow-2); }
+
+/* ---------- section heads ---------- */
+.section-head h2 {
+  text-transform: uppercase; letter-spacing: .09em; font-size: 17px;
+}
+.section-head::after {
+  content: ""; flex: 1 1 auto; height: 1px; align-self: center;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+
+/* ---------- panels ---------- */
+.panel, .module-card, .done-bar, .pager a, .code-block {
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--bg-elev), var(--bg-elev)) padding-box,
+    linear-gradient(150deg,
+      color-mix(in srgb, var(--accent) 55%, transparent),
+      color-mix(in srgb, var(--border) 90%, transparent) 42%,
+      color-mix(in srgb, var(--accent-2) 45%, transparent)) border-box;
+}
+.panel { position: relative; box-shadow: 0 8px 26px rgba(0,0,0,.28); }
+/* corner bracket */
+.panel::before {
+  content: ""; position: absolute; top: 9px; left: 9px; width: 14px; height: 14px;
+  border-top: 2px solid var(--accent-2); border-left: 2px solid var(--accent-2);
+  opacity: .65; pointer-events: none;
+}
+.panel::after {
+  content: ""; position: absolute; bottom: 9px; right: 9px; width: 14px; height: 14px;
+  border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent);
+  opacity: .5; pointer-events: none;
+}
+
+.panel > h2 { color: var(--text-dim); letter-spacing: .16em; font-size: 12px; }
+.panel > h2::before {
+  width: 4px; height: 16px; border-radius: 0;
+  clip-path: polygon(0 0, 100% 3px, 100% 100%, 0 calc(100% - 3px));
+  background: var(--accent); box-shadow: var(--glow);
+}
+/* japanese label, set by app.js via data-jp */
+.panel > h2::after {
+  content: attr(data-jp); margin-left: auto;
+  font-size: 10.5px; letter-spacing: .22em; color: var(--text-faint); opacity: .7;
+}
+
+.code-block { box-shadow: 0 8px 26px rgba(0,0,0,.34); }
+.code-block > header { background: color-mix(in srgb, var(--accent) 9%, var(--bg-code)); }
+.code-block .lang { color: var(--accent); letter-spacing: .16em; }
+.code-block .copy { border-radius: 0; }
+
+.lab {
+  background:
+    linear-gradient(var(--bg-elev), var(--bg-elev)) padding-box,
+    linear-gradient(150deg, var(--accent-2), var(--accent-4) 55%, var(--accent)) border-box;
+  box-shadow: 0 8px 30px rgba(0,0,0,.34), 0 0 34px color-mix(in srgb, var(--accent-2) 14%, transparent);
+}
+.lab > h2::before { background: var(--accent-2); box-shadow: var(--glow-2); }
+
+.out {
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  border-color: color-mix(in srgb, var(--accent-2) 26%, transparent);
+}
+.field input[type="text"], .field textarea, .field select, .field input[type="number"] {
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+}
+.field input:focus, .field textarea:focus, .field select:focus {
+  outline: none; border-color: var(--accent-2); box-shadow: var(--glow-2);
+}
+.field label { color: var(--accent-2); opacity: .8; }
+
+.block-card { border-radius: 0; clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); }
+.block-card.valid { box-shadow: 0 0 16px color-mix(in srgb, var(--ok) 24%, transparent); }
+.block-card.invalid { box-shadow: 0 0 16px color-mix(in srgb, var(--err) 30%, transparent); }
+.node { border-radius: 0; }
+.node.root { box-shadow: var(--glow); }
+.node.leaf-sel { box-shadow: var(--glow-2); }
+.barrow .track { border-radius: 0; }
+.barrow .track i { border-radius: 0; box-shadow: var(--glow-2); }
+
+/* ---------- module cards ---------- */
+.module-card { overflow: hidden; }
+.module-card > header {
+  background:
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--accent-4) 7%, transparent) 0 8px, transparent 8px 16px),
+    transparent;
+}
+.module-card .mc-badge {
+  border-radius: 0; font-size: 15px;
+  clip-path: polygon(50% 0, 100% 26%, 100% 74%, 50% 100%, 0 74%, 0 26%);
+  box-shadow: 0 0 18px currentColor;
+}
+.module-card h3 { text-transform: uppercase; letter-spacing: .05em; font-size: 15.5px; }
+.module-card .mc-prog .bar { border-radius: 0; }
+.module-card .mc-prog .bar span { border-radius: 0; box-shadow: 0 0 10px currentColor; }
+
+.lesson-tile { position: relative; }
+.lesson-tile::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--accent-2); transform: scaleY(0); transform-origin: top; transition: transform .18s;
+}
+.lesson-tile:hover::before { transform: scaleY(1); }
+.lesson-tile:hover .lt-title { color: var(--accent-2); }
+.lesson-tile .lt-num { color: var(--accent); font-weight: 700; }
+.lesson-tile.done .lt-num::after { text-shadow: 0 0 10px var(--ok); }
+
+/* ---------- lesson page ---------- */
+.lesson-head h1 { text-transform: none; letter-spacing: -.01em; }
+.lesson-head h1::after {
+  content: ""; display: block; width: 92px; height: 3px; margin-top: 12px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: var(--glow);
+}
+.crumbs { letter-spacing: .06em; text-transform: uppercase; font-size: 11.5px; }
+
+.chip {
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  letter-spacing: .07em; text-transform: uppercase;
+}
+.chip.lvl-beginner, .chip.lvl-intermediate, .chip.lvl-advanced { box-shadow: 0 0 12px color-mix(in srgb, currentColor 26%, transparent); }
+
+.goals li::before { content: "◆"; color: var(--accent); font-size: 11px; top: 2px; }
+.tasks li::before { border-radius: 0; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%); color: var(--accent-2); }
+
+.note { border-radius: 0; border-left-width: 4px; }
+.note .tag { color: var(--accent-2); letter-spacing: .18em; }
+.note.warn .tag { color: var(--warn); }
+.note.danger .tag { color: var(--err); }
+
+.prose code { color: var(--accent-2); border-radius: 0; }
+.prose strong { color: var(--accent-3); }
+.prose h3 { text-transform: uppercase; letter-spacing: .05em; font-size: 16px; color: var(--text); }
+.prose h3::before { content: "▚ "; color: var(--accent); font-size: 12px; }
+.prose li::marker { color: var(--accent); }
+.prose th { color: var(--accent-2); }
+
+.opt { border-radius: 0; clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px)); }
+.opt:hover { border-color: var(--accent-2); box-shadow: var(--glow-2); }
+.opt.correct { box-shadow: 0 0 16px color-mix(in srgb, var(--ok) 26%, transparent); }
+.opt.wrong   { box-shadow: 0 0 16px color-mix(in srgb, var(--err) 26%, transparent); }
+.explain { border-radius: 0; border-left: 3px solid var(--accent-2); }
+.quiz-q .q { letter-spacing: .01em; }
+
+.reslist .rt { border-radius: 0; color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+.done-bar { position: relative; overflow: hidden; }
+.done-bar::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(-45deg,
+    color-mix(in srgb, var(--accent) 8%, transparent) 0 10px, transparent 10px 20px);
+}
+.done-bar > * { position: relative; }
+
+.pager .dir { color: var(--accent); letter-spacing: .16em; }
+.pager a:hover { box-shadow: var(--glow-2); }
+
+/* ---------- diagrams ---------- */
+.dia-fig { margin: 0; }
+.dia-fig + .dia-fig { margin-top: 30px; padding-top: 26px; border-top: 1px dashed var(--border-soft); }
+.dia-scroll { overflow-x: auto; padding-bottom: 4px; }
+.dia { display: block; width: 100%; min-width: 620px; height: auto; overflow: visible; }
+.dia-cap {
+  font-size: 13px; color: var(--text-dim); margin: 9px 0 0;
+  padding-left: 13px; border-left: 2px solid var(--accent-2);
+}
+.dia-title {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--accent); margin: 0 0 10px;
+}
+
+.d-box  { fill: var(--d-fill); stroke: var(--d-line); stroke-width: 1.4; }
+.d-box.acc  { stroke: var(--accent-2); fill: color-mix(in srgb, var(--accent-2) 12%, transparent); }
+.d-box.hot  { stroke: var(--accent);   fill: color-mix(in srgb, var(--accent)   12%, transparent); }
+.d-box.ok   { stroke: var(--ok);       fill: color-mix(in srgb, var(--ok)       12%, transparent); }
+.d-box.bad  { stroke: var(--err);      fill: color-mix(in srgb, var(--err)      13%, transparent); }
+.d-box.ghost{ fill: none; stroke: var(--border); stroke-dasharray: 5 4; }
+
+.d-line { stroke: var(--d-line); stroke-width: 1.4; fill: none; }
+.d-line.acc { stroke: var(--accent-2); }
+.d-line.hot { stroke: var(--accent); }
+.d-line.ok  { stroke: var(--ok); }
+.d-line.bad { stroke: var(--err); }
+.d-line.dash { stroke-dasharray: 6 5; }
+.d-line.thin { stroke-width: 1; opacity: .6; }
+
+/* arrow heads mirror the line modifier so colour stays in sync */
+.d-head { fill: var(--d-line); stroke: none; }
+.d-head.acc { fill: var(--accent-2); }
+.d-head.hot { fill: var(--accent); }
+.d-head.ok  { fill: var(--ok); }
+.d-head.bad { fill: var(--err); }
+.d-head.ghost { fill: var(--border); }
+
+.d-t  { fill: var(--text);      font-family: var(--sans); font-size: 13px; font-weight: 600; }
+.d-s  { fill: var(--text-dim);  font-family: var(--sans); font-size: 11.5px; font-weight: 500; }
+.d-m  { fill: var(--accent-2);  font-family: var(--mono); font-size: 11px; }
+.d-k  { fill: var(--text-faint);font-family: var(--mono); font-size: 10px; letter-spacing: .14em; }
+.d-hot{ fill: var(--accent); }
+.d-ok { fill: var(--ok); }
+.d-bad{ fill: var(--err); }
+.d-am { fill: var(--accent-3); }
+
+.d-glow { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent-2) 70%, transparent)); }
+.d-pulse { animation: dpulse 2.4s ease-in-out infinite; }
+@keyframes dpulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.d-flow { stroke-dasharray: 7 7; animation: dflow 1.1s linear infinite; }
+@keyframes dflow { to { stroke-dashoffset: -14; } }
+
+/* ---------- misc ---------- */
+.empty { letter-spacing: .04em; }
+.spin { border-top-color: var(--accent); box-shadow: var(--glow); }
+.hash { color: var(--accent-2); }
+.good { color: var(--ok); }
+.bad  { color: var(--err); }
+.hl   { color: var(--accent-3); }
+
+::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); color: #fff; }
+
+@media (max-width: 620px) {
+  .hero::after { display: none; }
+  .dia { min-width: 560px; }
+}
