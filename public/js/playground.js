@@ -2860,6 +2860,737 @@ STOP</textarea></div>
       run();
     });
 
+  /* ---------- oracle aggregation ---------- */
+  reg('oraclebasics', 'Median versus mean under faulty reporters',
+    'Add faulty reporters to an oracle committee and watch what each aggregation rule does with them. The median holds while honest reporters remain a majority; the mean does not hold at all.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Reporters (n)</label><input id="ob-n" type="number" value="21" min="3" max="51" step="2"></div>
+          <div class="field"><label>Faulty reporters (f)</label><input id="ob-f" type="number" value="3" min="0" max="51" step="1"></div>
+          <div class="field"><label>True price (USD)</label><input id="ob-price" type="number" value="2000" min="0.0001" step="10"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Faulty behaviour</label><select id="ob-mode">
+            <option value="high">Report an absurd high value</option>
+            <option value="zero">Report zero</option>
+            <option value="stale">Report a stale price, 30% low</option>
+            <option value="collude">Collude on one wrong price, 40% high</option>
+          </select></div>
+          <div class="field"><label>Honest jitter (bps)</label><input id="ob-jitter" type="number" value="20" min="0" max="500" step="5"></div>
+        </div><div class="out" id="ob-log"></div>`;
+      function run() {
+        const n = Math.max(3, Math.min(51, Math.round(Number($(el, '#ob-n').value) || 3)));
+        const f = Math.max(0, Math.min(n, Math.round(Number($(el, '#ob-f').value) || 0)));
+        const p = Math.max(0.0001, Number($(el, '#ob-price').value) || 1);
+        const mode = $(el, '#ob-mode').value;
+        const jitter = Math.max(0, Number($(el, '#ob-jitter').value) || 0) / 10000;
+
+        const r = rng(0xC0FFEE);
+        const values = [];
+        for (let i = 0; i < n - f; i++) values.push(p * (1 + (r() - 0.5) * 2 * jitter));
+        for (let i = 0; i < f; i++) {
+          values.push(mode === 'high' ? p * 1000 : mode === 'zero' ? 0
+            : mode === 'stale' ? p * 0.7 : p * 1.4);
+        }
+        const sorted = values.slice().sort((a, b) => a - b);
+        const median = sorted.length % 2
+          ? sorted[(sorted.length - 1) / 2]
+          : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+        const mean = values.reduce((a, b) => a + b, 0) / values.length;
+
+        const medErr = Math.abs(median - p) / p, meanErr = Math.abs(mean - p) / p;
+        const majority = n >= 2 * f + 1;
+
+        $(el, '#ob-log').innerHTML =
+          'COMMITTEE\n  reporters ' + n + '   faulty ' + f + '   honest ' + (n - f) +
+          '\n  n >= 2f + 1 ?  ' + (majority
+            ? '<span class="good">yes — a median stays inside the honest range</span>'
+            : '<span class="bad">no — faulty reporters can place the median themselves</span>') +
+          '\n\nAGGREGATION\n' +
+          '  median  ' + num(median, 2) + ' USD   error ' + (medErr > 0.005
+            ? '<span class="bad">' + pct(medErr) + '</span>' : '<span class="good">' + pct(medErr) + '</span>') +
+          '\n  mean    ' + num(mean, 2) + ' USD   error ' + (meanErr > 0.005
+            ? '<span class="bad">' + pct(meanErr) + '</span>' : '<span class="good">' + pct(meanErr) + '</span>') +
+          '\n\n<span class="dim">One reporter is enough to make the mean useless. The median only moves once faulty reporters ' +
+          'reach half the committee — which is the whole fault-tolerance argument, and also why source independence ' +
+          'matters more than node count.</span>';
+      }
+      $$(el, 'input, select').forEach(i => { i.oninput = run; i.onchange = run; }); run();
+    });
+
+  /* ---------- price feed guards ---------- */
+  reg('oraclefeed', 'Price feed safety gate',
+    'Every guard from SafePriceReader, in the order the contract runs them. Break one input at a time and watch which revert fires first.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Primary answer</label><input id="of-answer" type="number" value="2000" step="1"></div>
+          <div class="field"><label>Feed decimals</label><select id="of-dec"><option value="8">8</option><option value="18">18</option><option value="6">6</option></select></div>
+          <div class="field"><label>Answer age (s)</label><input id="of-age" type="number" value="900" min="0" step="60"></div>
+          <div class="field"><label>maxAge (s)</label><input id="of-maxage" type="number" value="5400" min="1" step="60"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Band min</label><input id="of-min" type="number" value="1" step="1"></div>
+          <div class="field"><label>Band max</label><input id="of-max" type="number" value="100000" step="1000"></div>
+          <div class="field"><label>Secondary answer</label><input id="of-second" type="number" value="2004" step="1"></div>
+          <div class="field"><label>Sequencer</label><select id="of-seq">
+            <option value="l1">L1 — no check</option>
+            <option value="up">Up for hours</option>
+            <option value="fresh">Back up 5 min ago</option>
+            <option value="down">Down</option>
+          </select></div>
+        </div><div class="out" id="of-log"></div>`;
+      function run() {
+        const answer = Number($(el, '#of-answer').value) || 0;
+        const dec = Number($(el, '#of-dec').value);
+        const age = Math.max(0, Number($(el, '#of-age').value) || 0);
+        const maxAge = Math.max(1, Number($(el, '#of-maxage').value) || 1);
+        const lo = Number($(el, '#of-min').value) || 0;
+        const hi = Number($(el, '#of-max').value) || 0;
+        const second = Number($(el, '#of-second').value) || 0;
+        const seq = $(el, '#of-seq').value;
+
+        const line = (ok, label, detail) =>
+          '  ' + (ok ? '<span class="good">pass</span>' : '<span class="bad">REVERT</span>') +
+          '  ' + label + (detail ? '   ' + detail : '');
+
+        const checks = [];
+        let failed = null;
+        function check(ok, label, err, detail) {
+          checks.push(line(ok, label, detail));
+          if (!ok && !failed) failed = err;
+        }
+
+        check(seq !== 'down', 'sequencer up', 'SequencerDown()',
+          seq === 'l1' ? 'L1: check skipped' : seq === 'down' ? 'uptime feed reports down' : 'reported up');
+        check(seq !== 'fresh', 'grace period elapsed', 'GracePeriodNotOver()',
+          seq === 'fresh' ? 'only 5 min since restart, need 60' : seq === 'l1' ? 'not applicable' : 'restart is old enough');
+        check(answer > 0, 'answer > 0', 'NonPositiveAnswer()', answer <= 0 ? 'a negative answer casts to a huge uint' : '');
+        check(answer > lo && answer < hi, 'inside sanity band', 'PriceOutOfBand()',
+          answer <= lo ? 'pinned at or below minAnswer — the LUNA failure' : answer >= hi ? 'at or above maxAnswer' : '');
+        check(age <= maxAge, 'fresh enough', 'StalePrice()', 'age ' + num(age) + 's vs maxAge ' + num(maxAge) + 's');
+
+        const divergence = second > 0 && answer > 0
+          ? Math.abs(answer - second) / Math.min(answer, second) : 1;
+        check(divergence <= 0.02, 'feeds agree within 2%', 'FeedsDisagree()', pct(divergence) + ' apart');
+
+        // The feed publishes answer × 10^dec as an integer. A consumer that
+        // hard-codes 1e8 misreads it by exactly 10^(dec - 8).
+        const mid = (answer + second) / 2;
+        const hardCodedError = Math.pow(10, dec - 8);
+
+        $(el, '#of-log').innerHTML = 'GUARDS, IN CONTRACT ORDER\n' + checks.join('\n') + '\n\n' +
+          (failed
+            ? '<span class="bad">price() reverts with ' + failed + '</span>\n\n<span class="dim">Reverting is the ' +
+              'correct outcome. The consumer must now block borrows, mints and leverage while still allowing ' +
+              'repayments and collateral top-ups. A cached fallback price here is an unbounded credit facility.</span>'
+            : '<span class="good">price() returns ' + num(mid, 4) + ' USD</span>   <span class="dim">(mean of the two ' +
+              'feeds, normalised to 18 decimals internally)</span>\n\nDECIMALS\n' +
+              '  raw integer on chain          ' + (mid * Math.pow(10, dec)).toExponential(3) + '   <span class="dim">(answer × 10^' + dec + ')</span>\n' +
+              '  read via decimals()           ' + num(mid, 4) + ' USD   <span class="good">correct</span>\n' +
+              '  divided by a hard-coded 1e8   ' + num(mid * hardCodedError, 4) + ' USD   ' +
+              (hardCodedError === 1 ? '<span class="dim">right by luck: this feed happens to use 8</span>'
+                : '<span class="bad">wrong by ' + num(hardCodedError, hardCodedError < 1 ? 4 : 0) + 'x</span>'));
+      }
+      $$(el, 'input, select').forEach(i => { i.oninput = run; i.onchange = run; }); run();
+    });
+
+  /* ---------- manipulation cost ---------- */
+  reg('oracletwap', 'Oracle attack-cost calculator',
+    'Price the attack instead of guessing at it: pool depth sets the cost of displacement, the TWAP window sets how long it must be carried, and the borrow cap sets the prize.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Quote reserve (USD)</label><input id="ot-quote" type="number" value="2000000" min="1000" step="100000"></div>
+          <div class="field"><label>Price multiple (k)</label><input id="ot-k" type="number" value="2" min="1.01" step="0.25"></div>
+          <div class="field"><label>Swap fee (bps)</label><input id="ot-fee" type="number" value="30" min="0" max="300" step="5"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>TWAP window (min)</label><input id="ot-window" type="number" value="30" min="0" max="240" step="5"></div>
+          <div class="field"><label>Arb restores per block (%)</label><input id="ot-arb" type="number" value="50" min="0" max="100" step="5"></div>
+          <div class="field"><label>Extractable / borrow cap (USD)</label><input id="ot-cap" type="number" value="3000000" min="0" step="100000"></div>
+        </div><div class="out" id="ot-log"></div>`;
+      function run() {
+        const quote = Math.max(1000, Number($(el, '#ot-quote').value) || 1000);
+        const k = Math.max(1.01, Number($(el, '#ot-k').value) || 1.01);
+        const feeBps = Math.max(0, Number($(el, '#ot-fee').value) || 0);
+        const windowMin = Math.max(0, Number($(el, '#ot-window').value) || 0);
+        const arb = Math.min(1, Math.max(0, Number($(el, '#ot-arb').value) || 0) / 100);
+        const cap = Math.max(0, Number($(el, '#ot-cap').value) || 0);
+
+        const notional = quote * (Math.sqrt(k) - 1);         // input needed to move price by k
+        const roundTripFee = notional * (feeBps / 10000) * 2; // buy leg and unwind leg
+        const blocks = Math.ceil(windowMin * 60 / 12);        // 12s slots
+        // Holding a TWAP displaced means re-pushing whatever arbitrage restores,
+        // block after block. Each re-push pays fees and slippage on the restored part.
+        const carry = blocks * notional * arb * (feeBps / 10000) * 2;
+        const total = roundTripFee + carry;
+        const profit = cap - total;
+        const safeCap = total * 0.5;
+
+        $(el, '#ot-log').innerHTML =
+          'DISPLACEMENT\n' +
+          '  input needed to move price ' + num(k, 2) + 'x     ' + num(notional, 0) + ' USD   <span class="dim">(quote reserve x (sqrt(k) - 1))</span>\n' +
+          '  round-trip fees and slippage             ' + num(roundTripFee, 0) + ' USD   <span class="dim">(the notional is swapped, not spent)</span>\n' +
+          (windowMin > 0
+            ? '\nCARRYING A ' + num(windowMin, 0) + '-MINUTE TWAP\n' +
+              '  blocks to hold                           ' + num(blocks, 0) + '\n' +
+              '  arbitrage bleed while displaced          ' + num(carry, 0) + ' USD\n'
+            : '\nSPOT ORACLE — NOTHING TO CARRY\n  <span class="bad">one transaction, no time cost at all</span>\n') +
+          '\nATTACK ECONOMICS\n' +
+          '  total cost to attacker   ' + num(total, 0) + ' USD\n' +
+          '  extractable at cap       ' + num(cap, 0) + ' USD\n  ' +
+          (profit > 0
+            ? '<span class="bad">PROFITABLE: ' + num(profit, 0) + ' USD of profit.</span> Lower the borrow cap to about ' +
+              num(safeCap, 0) + ' USD, require deeper liquidity, or move to an aggregated feed.'
+            : '<span class="good">UNPROFITABLE: the attack loses ' + num(-profit, 0) + ' USD.</span> Re-check after any drop ' +
+              'in pool depth — the cost side falls with liquidity while the cap does not.') +
+          '\n\n<span class="dim">A teaching model, deliberately optimistic for the defender: it ignores flash-loan fees, gas and ' +
+          'MEV competition, and it assumes the attacker cannot control consecutive blocks. It also cannot price a thin real ' +
+          'market, where the manipulated price is the true price and every honest oracle reports it.</span>';
+      }
+      $$(el, 'input').forEach(i => i.oninput = run); run();
+    });
+
+  /* ---------- custom signed oracle ---------- */
+  reg('oracledesign', 'Signed report validator',
+    'Submit a signed price report to a custom m-of-n oracle and try to sneak one past it. Each rejected submission names the check that a real exploit would have skipped.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Signed for</label><select id="od-chain">
+            <option value="same">This chain and this contract</option>
+            <option value="other">Another chain id</option>
+            <option value="sibling">Sibling deployment, same chain</option>
+          </select></div>
+          <div class="field"><label>validUntil (s from now)</label><input id="od-valid" type="number" value="30" step="10"></div>
+          <div class="field"><label>Report roundId</label><input id="od-round" type="number" value="1042" min="0" step="1"></div>
+          <div class="field"><label>Stored lastRound</label><input id="od-last" type="number" value="1041" min="0" step="1"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Signer set (n)</label><input id="od-n" type="number" value="5" min="1" max="21" step="1"></div>
+          <div class="field"><label>Quorum (m)</label><input id="od-m" type="number" value="3" min="1" max="21" step="1"></div>
+          <div class="field"><label>Signatures supplied</label><input id="od-sigs" type="number" value="3" min="0" max="21" step="1"></div>
+          <div class="field shrink"><label>&nbsp;</label><label class="opt"><input id="od-dup" type="checkbox"><span>One key signed twice</span></label></div>
+        </div>
+        <div class="row"><label class="opt"><input id="od-paused" type="checkbox"><span>Oracle paused by guardian</span></label></div>
+        <div class="out" id="od-log"></div>`;
+      function run() {
+        const chain = $(el, '#od-chain').value;
+        const valid = Number($(el, '#od-valid').value) || 0;
+        const round = Math.max(0, Number($(el, '#od-round').value) || 0);
+        const last = Math.max(0, Number($(el, '#od-last').value) || 0);
+        const n = Math.max(1, Number($(el, '#od-n').value) || 1);
+        const m = Math.max(1, Number($(el, '#od-m').value) || 1);
+        const sigs = Math.max(0, Number($(el, '#od-sigs').value) || 0);
+        const dup = $(el, '#od-dup').checked;
+        const paused = $(el, '#od-paused').checked;
+
+        const unique = dup ? Math.max(0, Math.min(sigs - 1, n)) : Math.min(sigs, n);
+        const rows = [];
+        let err = null;
+        function check(ok, label, error, note) {
+          rows.push('  ' + (ok ? '<span class="good">pass</span>' : '<span class="bad">REVERT</span>') +
+            '  ' + label + (note ? '   ' + note : ''));
+          if (!ok && !err) err = error;
+        }
+
+        check(!paused, 'not paused', 'Paused()', paused ? 'guardian halted consumption' : '');
+        check(valid > 0, 'not expired', 'Expired()',
+          valid > 0 ? num(valid, 0) + 's of validity left' : 'an expired report is a free replay of an old price');
+        check(round > last, 'round is newer', 'StaleRound()',
+          round > last ? 'round ' + round + ' > stored ' + last : 'replaying round ' + round + ' over ' + last);
+        check(!dup, 'signers sorted and unique', 'SignersUnsorted()',
+          dup ? 'the same key counted twice would fake quorum' : '');
+        check(unique >= m, 'quorum met', 'QuorumNotMet(' + unique + ')', unique + ' of ' + m + ' required, set size ' + n);
+        check(chain === 'same', 'domain separator matches', 'invalid signer recovered',
+          chain === 'same' ? 'chainId + address(this) bound into the digest'
+            : chain === 'other' ? 'signed for a different chain id — a fork replay'
+            : 'signed for a sibling deployment on this chain');
+
+        $(el, '#od-log').innerHTML = 'submit(report, signatures)\n' + rows.join('\n') + '\n\n' +
+          (err
+            ? '<span class="bad">REJECTED: ' + err + '</span>\n\n<span class="dim">Each of these checks exists because ' +
+              'omitting it has cost somebody money. The digest binding is the one most often skipped in custom oracles: ' +
+              'without chainId and the contract address, one valid signature works on every deployment that shares the ' +
+              'signer set.</span>'
+            : '<span class="good">ACCEPTED: price stored, lastRound advanced to ' + round + '.</span>\n\n' +
+              '<span class="dim">Now the operational half: who rotates a compromised signer, who can pause, and how you ' +
+              'find out that reporters stopped publishing at 3am. A custom oracle makes your key management part of the ' +
+              'protocol’s solvency.</span>');
+      }
+      $$(el, 'input, select').forEach(i => { i.oninput = run; i.onchange = run; }); run();
+    });
+
+  /* ---------- chain selection ---------- */
+  reg('chainfit', 'Chain fit from requirements',
+    'State what the product actually needs. Hard requirements eliminate chains outright — the ranking below only orders whatever survived.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Sustained writes / second</label><input id="cf-tps" type="number" value="40" min="1" step="10"></div>
+          <div class="field"><label>Can wait for finality (seconds)</label><input id="cf-fin" type="number" value="60" min="1" step="10"></div>
+          <div class="field"><label>Team ships fastest in</label><select id="cf-lang">
+            <option value="solidity">Solidity</option>
+            <option value="rust">Rust</option>
+            <option value="move">Move</option>
+            <option value="none">no preference</option>
+          </select></div>
+        </div>
+        <div class="row">
+          <label class="opt"><input id="cf-liq" type="checkbox" checked><span>Needs liquidity that already exists</span></label>
+          <label class="opt"><input id="cf-sov" type="checkbox"><span>Must control its own runtime and upgrades</span></label>
+        </div>
+        <div class="out" id="cf-out"></div>`;
+
+      const CHAINS = [
+        { name: 'Ethereum L1', liq: 'deep', tps: 15, fin: 780, sov: false, lang: 'solidity',
+          note: 'settlement and liquidity; every write is expensive' },
+        { name: 'EVM rollup', liq: 'deep', tps: 300, fin: 780, sov: false, lang: 'solidity',
+          note: 'cheap writes; the sequencer and the upgrade keys are the trust' },
+        { name: 'Solana', liq: 'medium', tps: 2000, fin: 13, sov: false, lang: 'rust',
+          note: 'parallel while write sets stay disjoint; declare accounts up front' },
+        { name: 'Sui', liq: 'medium', tps: 2000, fin: 1, sov: false, lang: 'move',
+          note: 'owned-object writes never reach consensus' },
+        { name: 'Cosmos app-chain', liq: 'thin', tps: 1000, fin: 6, sov: true, lang: 'rust',
+          note: 'your block space, your validator set, your pager' }
+      ];
+
+      function run() {
+        const tps = Math.max(1, Number($(el, '#cf-tps').value) || 1);
+        const fin = Math.max(1, Number($(el, '#cf-fin').value) || 1);
+        const lang = $(el, '#cf-lang').value;
+        const needLiq = $(el, '#cf-liq').checked;
+        const sov = $(el, '#cf-sov').checked;
+
+        const out = [], gone = [];
+        CHAINS.forEach(c => {
+          if (sov && !c.sov) { gone.push([c.name, 'cannot own the runtime']); return; }
+          if (tps > c.tps) { gone.push([c.name, 'needs ' + num(tps, 0) + ' w/s, practical ceiling ' + num(c.tps, 0)]); return; }
+          if (fin < c.fin) { gone.push([c.name, 'finality ' + num(c.fin, 0) + 's, product tolerates ' + num(fin, 0) + 's']); return; }
+          if (needLiq && c.liq === 'thin') { gone.push([c.name, 'you would bootstrap the liquidity yourself']); return; }
+          out.push(c);
+        });
+        out.sort((a, b) => (a.lang === lang ? 0 : 1) - (b.lang === lang ? 0 : 1) || b.tps - a.tps);
+
+        const lines = out.length
+          ? out.map((c, i) => '  ' + (i === 0 ? '<span class="good">' + c.name + '</span>' : '<span class="hl">' + c.name + '</span>') +
+              '\n      ' + c.note + (c.lang === lang ? '   <span class="good">team already ships in ' + c.lang + '</span>'
+                : '   <span class="dim">a ' + c.lang + ' rewrite</span>')).join('\n')
+          : '  <span class="bad">nothing survives these requirements.</span>\n      Relax one of them, or the product is not a single-chain product.';
+
+        $(el, '#cf-out').innerHTML =
+          'SURVIVORS, best first\n' + lines +
+          '\n\nELIMINATED\n' + (gone.length
+            ? gone.map(g => '  <span class="bad">' + g[0] + '</span> — ' + g[1]).join('\n')
+            : '  <span class="dim">nothing — these requirements do not constrain the choice yet</span>') +
+          '\n\n<span class="dim">Eliminations are the useful output. A requirement that removes nothing was not a requirement, ' +
+          'and a benchmark that removes nothing is marketing. Note what a wrong answer costs: EVM to EVM is a redeploy and a ' +
+          're-audit, EVM to Move or SVM is a rewrite, and anything to an app-chain hires an operations team.</span>';
+      }
+      $$(el, 'input, select').forEach(i => { i.oninput = run; i.onchange = run; }); run();
+    });
+
+  /* ---------- multi-provider reads ---------- */
+  reg('rpcpool', 'Quorum across RPC providers',
+    'Break the providers one at a time and watch what the read path can still conclude. The interesting states are the ones where it returns a value it should not.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Providers queried</label><input id="rp-n" type="number" value="3" min="1" max="9" step="1"></div>
+          <div class="field"><label>Down (timeout / 429)</label><input id="rp-down" type="number" value="0" min="0" max="9" step="1"></div>
+          <div class="field"><label>Lagging past tolerance</label><input id="rp-stale" type="number" value="1" min="0" max="9" step="1"></div>
+          <div class="field"><label>Returning a wrong value</label><input id="rp-bad" type="number" value="0" min="0" max="9" step="1"></div>
+        </div>
+        <div class="row">
+          <label class="opt"><input id="rp-shared" type="checkbox"><span>All endpoints resolve to one upstream provider</span></label>
+          <label class="opt"><input id="rp-lag" type="checkbox" checked><span>Compare block heads before comparing values</span></label>
+        </div>
+        <div class="out" id="rp-out"></div>`;
+
+      function run() {
+        const n = Math.max(1, Math.min(9, Number($(el, '#rp-n').value) || 1));
+        let down = Math.max(0, Number($(el, '#rp-down').value) || 0);
+        let stale = Math.max(0, Number($(el, '#rp-stale').value) || 0);
+        let bad = Math.max(0, Number($(el, '#rp-bad').value) || 0);
+        const shared = $(el, '#rp-shared').checked;
+        const lagCheck = $(el, '#rp-lag').checked;
+
+        down = Math.min(down, n);
+        stale = Math.min(stale, n - down);
+        bad = Math.min(bad, n - down - stale);
+
+        // Correlated infrastructure is one provider wearing several names.
+        const effective = shared ? 1 : n;
+        const responded = n - down;
+        // Without a head comparison a lagging endpoint is counted as if it were current.
+        const counted = lagCheck ? responded - stale : responded;
+        const wrong = bad + (lagCheck ? 0 : stale);
+        const honest = counted - wrong;
+        const needed = Math.floor(counted / 2) + 1;
+
+        const rows = [];
+        for (let i = 0; i < n; i++) {
+          const tag = i < down ? ['down', 'bad', 'no answer at all']
+            : i < down + stale ? ['lagging', lagCheck ? 'dim' : 'bad', '14 blocks behind the best head']
+            : i < down + stale + bad ? ['wrong', 'bad', 'answers, disagrees with the majority']
+            : ['fresh', 'good', 'current head, agrees'];
+          rows.push('  provider ' + String.fromCharCode(65 + i) + '  <span class="' + tag[1] + '">' +
+            tag[0] + '</span>' + '   <span class="dim">' + tag[2] + '</span>');
+        }
+
+        let verdict, why;
+        if (counted === 0) {
+          verdict = '<span class="bad">NO ANSWER</span>';
+          why = 'Every endpoint failed or was rejected. Correct outcome — a read path with nothing to report must say so rather than reuse a cache.';
+        } else if (honest >= needed) {
+          verdict = '<span class="good">VALUE ACCEPTED</span>';
+          why = num(honest, 0) + ' of ' + num(counted, 0) + ' counted responses agree, quorum is ' + num(needed, 0) + '.';
+        } else if (wrong >= needed) {
+          verdict = '<span class="bad">WRONG VALUE ACCEPTED</span>';
+          why = 'The bad responses are the majority of what was counted. The read path is confidently wrong, which is worse than returning nothing.';
+        } else {
+          verdict = '<span class="bad">NO QUORUM</span>';
+          why = 'Responses disagree and none reaches ' + num(needed, 0) + '. Surface the disagreement; do not average two different chain states together.';
+        }
+
+        $(el, '#rp-out').innerHTML =
+          rows.join('\n') +
+          '\n\n  counted ' + num(counted, 0) + ' · quorum needed ' + num(needed, 0) +
+          ' · agreeing ' + num(Math.max(0, honest), 0) +
+          '\n\n' + verdict + '\n  ' + why +
+          (shared ? '\n\n<span class="bad">All ' + num(n, 0) + ' endpoints sit behind one upstream, so the independence is fictional: ' +
+            'effective providers = ' + num(effective, 0) + '. One outage takes every one of them, and the quorum only proves ' +
+            'that one server is consistent with itself.</span>' : '') +
+          (!lagCheck && stale > 0 ? '\n\n<span class="bad">No head comparison, so ' + num(stale, 0) + ' stale response(s) were counted ' +
+            'as current. A provider twelve blocks behind is not slow, it is answering about a different state.</span>' : '') +
+          '\n\n<span class="dim">Reads are only half of it. A broadcast that one endpoint quietly drops looks identical to one it ' +
+          'accepted: you get a transaction hash either way. Watch for inclusion, not for the RPC response, and send to more than ' +
+          'one endpoint.</span>';
+      }
+      $$(el, 'input').forEach(i => { i.oninput = run; i.onchange = run; }); run();
+    });
+
+  /* ---------- L2 trust profile ---------- */
+  reg('l2pick', 'Build an L2 and read its real trust',
+    'Choose the properties instead of the brand. The worst case is derived from where the data goes, who may prove, and how fast the rules can change.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Transaction data</label><select id="lp-data">
+            <option value="l1">published to L1 (blob or calldata)</option>
+            <option value="committee">held by a data committee</option>
+            <option value="own">its own chain</option>
+          </select></div>
+          <div class="field"><label>What convinces L1</label><select id="lp-proof">
+            <option value="validity">validity proof</option>
+            <option value="fraud">fraud proof</option>
+            <option value="consensus">an external validator set</option>
+          </select></div>
+          <div class="field"><label>Upgrade delay (hours)</label><input id="lp-up" type="number" value="0" min="0" max="336" step="12"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Sequencer</label><select id="lp-seq">
+            <option value="single">single, operated by the team</option>
+            <option value="shared">shared / rotating</option>
+            <option value="decentralised">decentralised</option>
+          </select></div>
+          <label class="opt"><input id="lp-perm" type="checkbox"><span>Anyone may submit a proof</span></label>
+          <label class="opt"><input id="lp-force" type="checkbox"><span>Forced inclusion via L1</span></label>
+        </div>
+        <div class="out" id="lp-out"></div>`;
+
+      function run() {
+        const data = $(el, '#lp-data').value;
+        const proof = $(el, '#lp-proof').value;
+        const seq = $(el, '#lp-seq').value;
+        const perm = $(el, '#lp-perm').checked;
+        const force = $(el, '#lp-force').checked;
+        const up = Math.max(0, Number($(el, '#lp-up').value) || 0);
+
+        const family = data === 'own' ? 'sidechain'
+          : data === 'committee' ? (proof === 'validity' ? 'validium' : 'plasma-shaped design')
+          : proof === 'validity' ? 'ZK rollup'
+          : proof === 'fraud' ? 'optimistic rollup'
+          : 'a chain that posts data it cannot prove';
+
+        const risks = [];
+        let worst = 'Anyone can rebuild state from L1 data and exit without the operator.';
+
+        if (data === 'committee') {
+          risks.push('Data availability rests on a committee. Withheld data blocks your exit even while every proof stays valid.');
+          worst = 'Funds frozen if the committee withholds.';
+        }
+        if (data === 'own') {
+          risks.push('Security is the sidechain validator set plus the bridge, not the L1 you deposited from.');
+          worst = 'Funds are exactly as safe as the bridge signers.';
+        }
+        if (proof === 'fraud' && !perm) {
+          risks.push('Fraud proofs exist but only a whitelist may submit them. The defence against an invalid state root is that list showing up.');
+        }
+        if (proof === 'consensus' && data === 'l1') {
+          risks.push('Data is published but nothing on L1 checks the transition, so publishing buys reconstruction, not enforcement.');
+        }
+        if (seq === 'single' && !force) {
+          risks.push('One sequencer and no escape hatch: an address can be censored indefinitely with no on-chain remedy.');
+        }
+        if (seq === 'single' && force) {
+          risks.push('One sequencer, but forced inclusion bounds censorship to the inbox deadline. Confirm somebody has exercised it recently.');
+        }
+        if (up === 0) {
+          risks.push('Upgrades are instant. Whoever holds the key can replace the bridge or verifier faster than users can withdraw.');
+          worst = 'The upgrade key is a total-control key, whatever the proof system does.';
+        }
+
+        const exitH = proof === 'validity' ? 4 : proof === 'fraud' ? 24 * 7 : 2;
+        const stage = (data === 'l1' && perm && up >= 168) ? 'stage 2 — proofs live, upgrades constrained'
+          : (data === 'l1' && up >= 24) ? 'stage 1 — training wheels, but users can leave before a change lands'
+          : 'stage 0 — the operators are the security';
+
+        $(el, '#lp-out').innerHTML =
+          'CLASSIFIED AS  <span class="hl">' + esc(family) + '</span>\n' +
+          '  ' + esc(stage) +
+          '\n\nWITHDRAWAL\n  canonical exit ≈ ' + (exitH >= 24 ? num(exitH / 24, 1) + ' days' : num(exitH, 0) + ' hours') +
+          '\n  <span class="dim">a fast bridge shortens this by paying somebody to wait instead of you — a fee and one more counterparty</span>' +
+          (force ? '\n  <span class="good">forced inclusion available</span>' : '\n  <span class="bad">no forced-inclusion path</span>') +
+          '\n\nRISKS\n' + (risks.length
+            ? risks.map(r => '  <span class="bad">•</span> ' + r).join('\n')
+            : '  <span class="good">none of the standard training wheels are present</span>') +
+          '\n\nWORST CASE\n  ' + (worst.indexOf('rebuild') === 0 || worst.indexOf('Anyone') === 0
+            ? '<span class="good">' + worst + '</span>' : '<span class="bad">' + worst + '</span>') +
+          '\n\n<span class="dim">Two chains can share a proof system and have nothing else in common. The proof constrains state ' +
+          'transitions under the current contracts; whoever can replace those contracts is outside that constraint entirely.</span>';
+      }
+      $$(el, 'input, select').forEach(i => { i.oninput = run; i.onchange = run; }); run();
+    });
+
+  /* ---------- storage backends ---------- */
+  reg('dstore', 'Cost and failure mode of keeping bytes',
+    'Price the same data across storage models over a real horizon. The number matters less than the sentence underneath it: what has to keep happening for the bytes to survive.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Data size (GB)</label><input id="ds-gb" type="number" value="20" min="0.001" step="1"></div>
+          <div class="field"><label>Horizon (years)</label><input id="ds-yr" type="number" value="10" min="1" max="100" step="1"></div>
+          <div class="field"><label>Copies / pinning services</label><input id="ds-rep" type="number" value="2" min="1" max="9" step="1"></div>
+        </div>
+        <div class="row">
+          <label class="opt"><input id="ds-enc" type="checkbox"><span>Encrypted before upload</span></label>
+          <label class="opt"><input id="ds-pii" type="checkbox"><span>Contains personal data</span></label>
+        </div>
+        <div class="out" id="ds-out"></div>`;
+
+      function run() {
+        const gb = Math.max(0.001, Number($(el, '#ds-gb').value) || 0.001);
+        const yr = Math.max(1, Number($(el, '#ds-yr').value) || 1);
+        const rep = Math.max(1, Number($(el, '#ds-rep').value) || 1);
+        const enc = $(el, '#ds-enc').checked;
+        const pii = $(el, '#ds-pii').checked;
+
+        // Rough public list prices, deliberately order-of-magnitude only.
+        const pinPerGbMonth = 0.15, arweaveOnce = 6.5, filecoinPerGbYear = 0.02;
+        const chainPerGb = 1.6e7;   // L1 calldata, at a boring gas price
+
+        const models = [
+          { n: 'IPFS + pinning', cost: gb * rep * pinPerGbMonth * 12 * yr, c: 'hl',
+            f: 'Survives while somebody keeps paying. The invoice is the durability guarantee, and it outlives whoever set it up by exactly zero days.' },
+          { n: 'Arweave endowment', cost: gb * arweaveOnce, c: 'good',
+            f: 'Paid once. Durability rests on the endowment maths, which assumes storage costs keep falling. No delete, ever.' },
+          { n: 'Filecoin deals', cost: gb * rep * filecoinPerGbYear * yr, c: 'good',
+            f: 'Providers prove they still hold it and lose stake if they stop. Renew the deals — and plan retrieval separately, it is not a CDN.' },
+          { n: 'On chain (L1 calldata)', cost: gb * chainPerGb, c: 'bad',
+            f: 'Every full node stores it forever and you can never remove it. Correct for a 2 KB artefact, absurd above that.' }
+        ];
+
+        const rows = models.map(m =>
+          '  <span class="' + m.c + '">' + m.n.padEnd(22) + '</span>' +
+          (m.cost >= 1e6 ? '$' + num(m.cost / 1e6, 1) + 'M' : m.cost >= 1000 ? '$' + num(m.cost / 1000, 1) + 'k' : '$' + num(m.cost, 2)) +
+          '\n      <span class="dim">' + m.f + '</span>').join('\n\n');
+
+        $(el, '#ds-out').innerHTML =
+          num(gb, 3) + ' GB over ' + num(yr, 0) + ' years, ' + num(rep, 0) + ' cop' + (rep === 1 ? 'y' : 'ies') + '\n\n' + rows +
+          '\n\nANCHOR\n  Publish a Merkle root of the manifest on chain (one small transaction) and any single file can be proven ' +
+          'against it later without fetching the rest. That is the part the chain is actually good at.' +
+          (pii
+            ? '\n\n<span class="bad">PERSONAL DATA: do not publish these bytes.</span>\n  Erasure obligations and an ' +
+              'append-only store cannot both hold. Keep the plaintext where you can delete it, publish only salted hashes, and ' +
+              'destroy the salt with the record. ' + (enc
+                ? 'Encryption is not erasure — a leaked or aged key republishes everything retroactively.'
+                : 'Nothing here is even encrypted yet.')
+            : enc
+              ? '\n\n<span class="good">Encrypted before upload.</span> Keep the keys out of the same system, and remember a CID ' +
+                'is an address, not a password — obscurity has never protected an unencrypted upload.'
+              : '\n\n<span class="dim">Unencrypted uploads are world-readable the moment the CID is known, and CIDs leak through ' +
+                'gateways, frontends and anyone who ever had the link.</span>');
+      }
+      $$(el, 'input').forEach(i => { i.oninput = run; i.onchange = run; }); run();
+    });
+
+  /* ---------- governance capture ---------- */
+  reg('govern', 'Price a governance takeover',
+    'Set the distribution, the quorum and the delays, then compare what capture costs with what the treasury holds. Turn the snapshot off to watch a flash loan walk in.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Circulating supply (M)</label><input id="gv-sup" type="number" value="300" min="1" step="10"></div>
+          <div class="field"><label>Price (USD)</label><input id="gv-px" type="number" value="0.40" min="0.0001" step="0.05"></div>
+          <div class="field"><label>Quorum (% of supply)</label><input id="gv-q" type="number" value="4" min="0.1" max="60" step="0.5"></div>
+          <div class="field"><label>Habitual turnout (%)</label><input id="gv-turn" type="number" value="6" min="0.1" max="100" step="1"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Order-book depth (USD, 2% move)</label><input id="gv-depth" type="number" value="250000" min="1000" step="50000"></div>
+          <div class="field"><label>Treasury (USD M)</label><input id="gv-tre" type="number" value="120" min="1" step="10"></div>
+          <div class="field"><label>Timelock (days)</label><input id="gv-tl" type="number" value="2" min="0" max="30" step="1"></div>
+        </div>
+        <div class="row">
+          <label class="opt"><input id="gv-snap" type="checkbox" checked><span>Voting power read at a snapshot block</span></label>
+          <label class="opt"><input id="gv-bribe" type="checkbox"><span>An active vote-rental market exists</span></label>
+        </div>
+        <div class="out" id="gv-out"></div>`;
+
+      function run() {
+        const supply = Math.max(1, Number($(el, '#gv-sup').value) || 1) * 1e6;
+        const px = Math.max(0.0001, Number($(el, '#gv-px').value) || 0.0001);
+        const qPct = Math.max(0.1, Number($(el, '#gv-q').value) || 0.1) / 100;
+        const turnout = Math.max(0.1, Number($(el, '#gv-turn').value) || 0.1) / 100;
+        const depth = Math.max(1000, Number($(el, '#gv-depth').value) || 1000);
+        const treasury = Math.max(1, Number($(el, '#gv-tre').value) || 1) * 1e6;
+        const timelock = Math.max(0, Number($(el, '#gv-tl').value) || 0);
+        const snap = $(el, '#gv-snap').checked;
+        const bribe = $(el, '#gv-bribe').checked;
+
+        // Enough to out-vote the habitual turnout, but never below the quorum bar.
+        const share = Math.max(qPct, turnout / 2 + 0.0001);
+        const naive = supply * share * px;
+        // Sweeping a thin book costs more than the quote: 2% of depth per 2% of move.
+        const impact = 1 + Math.min(9, naive / depth);
+        const buyCost = naive * impact;
+        // Renting votes skips the inventory risk entirely and is priced per vote.
+        const rentCost = naive * 0.08;
+        const cost = bribe ? Math.min(buyCost, rentCost) : buyCost;
+
+        const ratio = treasury / cost;
+        const safeQuorum = Math.min(0.5, (treasury / 3) / (supply * px * impact));
+
+        $(el, '#gv-out').innerHTML =
+          'TO CARRY A VOTE\n' +
+          '  tokens needed        ' + num(supply * share / 1e6, 2) + 'M  <span class="dim">(' + pct(share, 2) + ' of supply' +
+            (share > qPct ? ', above quorum because turnout is ' + pct(turnout, 1) : '') + ')</span>\n' +
+          '  quoted cost          $' + num(naive / 1e6, 2) + 'M\n' +
+          '  after price impact   <span class="hash">$' + num(buyCost / 1e6, 2) + 'M</span>  <span class="dim">×' + num(impact, 2) +
+            ' on a book that absorbs $' + num(depth / 1000, 0) + 'k per 2%</span>\n' +
+          (bribe ? '  or rent the votes    <span class="bad">$' + num(rentCost / 1e6, 2) + 'M</span>  <span class="dim">bribe markets sell ' +
+            'a single vote without the inventory risk</span>\n' : '') +
+          '\nAGAINST A TREASURY OF $' + num(treasury / 1e6, 0) + 'M\n' +
+          (ratio > 1
+            ? '  <span class="bad">CAPTURE IS PROFITABLE — the prize is ' + num(ratio, 1) + '× the cost.</span>\n' +
+              '  Quorum would need to be about ' + pct(safeQuorum, 1) + ' of supply before that stops being true.'
+            : '  <span class="good">Capture costs ' + num(1 / ratio, 1) + '× what it could take.</span>  Re-check after any drawdown: ' +
+              'the cost side falls with the price while the treasury does not.') +
+          '\n\nFLASH LOAN\n' +
+          (snap
+            ? '  <span class="good">Blocked.</span> Weight comes from balances checkpointed at the proposal’s snapshot block, so tokens ' +
+              'borrowed and repaid inside one transaction carry none. Acquiring weight means holding across blocks — visible, and at risk.'
+            : '  <span class="bad">Open.</span> Voting power is read at vote time, so an attacker borrows the supply, votes and repays ' +
+              'atomically. Cost of the attack: fees. Several protocols have lost their treasury exactly this way.') +
+          '\n\nDELAY\n' +
+          (timelock > 0
+            ? '  <span class="good">' + num(timelock, 0) + '-day timelock.</span> A passed proposal becomes a public countdown: holders ' +
+              'can exit and a cancel-only guardian can veto. Delay keeps working when your assumptions about voters do not.'
+            : '  <span class="bad">No timelock.</span> A vote that passes executes immediately, so nobody finds out in time to leave. ' +
+              'This is the single cheapest fix on this page.') +
+          '\n\n<span class="dim">A teaching model: it ignores the tokens that never vote, the cost of exiting the position afterwards, ' +
+          'and any social layer that forks away from a hostile outcome. It is deliberately generous to the attacker on price impact ' +
+          'and generous to the defender everywhere else.</span>';
+      }
+      $$(el, 'input').forEach(i => { i.oninput = run; i.onchange = run; }); run();
+    });
+
+  /* ---------- do you need a chain ---------- */
+  reg('chaintype', 'Do you actually need a blockchain',
+    'Four questions, answered in order. The first one that fails is the answer — everything after it is a more expensive way to get the same property.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Organisations that write</label><input id="ct-w" type="number" value="3" min="1" max="50" step="1"></div>
+          <div class="field"><label>Sustained writes / second</label><input id="ct-tps" type="number" value="50" min="1" step="10"></div>
+        </div>
+        <div class="row">
+          <label class="opt"><input id="ct-dist" type="checkbox" checked><span>They refuse each other’s records as the truth</span></label>
+          <label class="opt"><input id="ct-int" type="checkbox"><span>An intermediary they all accept exists</span></label>
+        </div>
+        <div class="row">
+          <label class="opt"><input id="ct-ord" type="checkbox" checked><span>They need one agreed ordering, not later reconciliation</span></label>
+          <label class="opt"><input id="ct-pub" type="checkbox"><span>Strangers can join and transact</span></label>
+          <label class="opt"><input id="ct-pii" type="checkbox"><span>The records contain personal data</span></label>
+        </div>
+        <div class="out" id="ct-out"></div>`;
+
+      function run() {
+        const writers = Math.max(1, Number($(el, '#ct-w').value) || 1);
+        const tps = Math.max(1, Number($(el, '#ct-tps').value) || 1);
+        const distrust = $(el, '#ct-dist').checked;
+        const inter = $(el, '#ct-int').checked;
+        const ordering = $(el, '#ct-ord').checked;
+        const pub = $(el, '#ct-pub').checked;
+        const pii = $(el, '#ct-pii').checked;
+
+        const checks = [
+          [writers >= 2, 'two or more writing organisations', writers + ' writer' + (writers === 1 ? '' : 's')],
+          [distrust, 'mutual distrust', distrust ? 'nobody may hold the pen alone' : 'they accept each other’s records'],
+          [!inter, 'no acceptable intermediary', inter ? 'one exists and is already trusted' : 'none they would all accept'],
+          [ordering, 'shared ordering required', ordering ? 'one consistent view' : 'reconciliation is enough']
+        ];
+
+        const rows = checks.map(c => '  ' + (c[0] ? '<span class="good">holds</span>' : '<span class="bad">FAILS</span>') +
+          '   ' + c[1] + '   <span class="dim">' + c[2] + '</span>').join('\n');
+
+        let answer, because, caveat = '';
+        if (writers < 2) {
+          answer = 'A database with an append-only signed log';
+          because = 'A single writer gains nothing from consensus. Hash-chain the entries, sign them, publish a root periodically, ' +
+            'and an auditor can verify that history was never rewritten — for the cost of one small transaction a day.';
+        } else if (!distrust) {
+          answer = 'A shared database or an API with a shared schema';
+          because = 'Parties who accept each other’s records do not have a Byzantine problem. They have an integration problem, ' +
+            'and consensus is an expensive way to avoid writing an interface.';
+        } else if (inter) {
+          answer = 'Use the intermediary, and anchor its log publicly';
+          because = 'A neutral party everyone already accepts is cheaper than a consortium. Anchoring its log keeps it honest ' +
+            'without asking every participant to run infrastructure.';
+        } else if (!ordering) {
+          answer = 'Independent logs, cross-anchored';
+          because = 'Each party keeps its own log and publishes Merkle roots. You get tamper evidence without anyone having to ' +
+            'agree a global order — which is the expensive half.';
+        } else if (pub) {
+          answer = 'A public chain';
+          because = 'Open participation and adversarial users are precisely what permissionless consensus was built for. ' +
+            'Everything in the first twelve modules applies.';
+        } else {
+          answer = 'A permissioned consortium chain';
+          because = 'Known writers who distrust each other and need one ordering: BFT among named validators, no Sybil resistance ' +
+            'required, throughput up, censorship resistance gone.';
+          caveat = 'The hard part is not the technology. Who runs a node, who pays, who resolves a dispute and what happens when ' +
+            'a member leaves — settle that first, because it is what killed the last wave of pilots.' +
+            (tps > 3000 ? ' At ' + num(tps, 0) + ' writes/second, check the parties are genuinely sharing state rather than using a chain as a message bus.' : '');
+        }
+
+        $(el, '#ct-out').innerHTML =
+          rows + '\n\n<span class="hl">' + esc(answer) + '</span>\n  ' + because +
+          (caveat ? '\n\n<span class="dim">' + caveat + '</span>' : '') +
+          (pii
+            ? '\n\n<span class="bad">PERSONAL DATA</span>\n  Erasure obligations and an immutable ledger are incompatible, and ' +
+              'encryption is not erasure. Even a plain hash of a name, an email or a national ID is brute-forceable, so it is still ' +
+              'personal data in practice. Keep plaintext in a system you can erase, commit to salted hashes, and destroy the salt ' +
+              'with the record. Have this reviewed before launch, not after.'
+            : '') +
+          '\n\n<span class="dim">Say it out loud in the meeting: which conditions fail, what the alternative costs, and that it can ' +
+          'migrate to a shared ledger the day a third independent writer actually appears.</span>';
+      }
+      $$(el, 'input').forEach(i => { i.oninput = run; i.onchange = run; }); run();
+    });
+
   /* ---------- export ---------- */
   global.LABS = LABS;
 })(window);

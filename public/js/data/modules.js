@@ -4,7 +4,7 @@ window.ROADMAP = {
   meta: {
     title: 'Blockchain Roadmap',
     tagline: 'From hash functions to deployed DeFi contracts, one session at a time.',
-    totalHours: 63
+    totalHours: 75
   },
 
   modules: [
@@ -84,6 +84,20 @@ window.ROADMAP = {
       color: '#c4b5fd',
       summary: 'MEV, cross-chain messaging, smart wallets, production cryptography and reorg-safe data systems.',
       outcome: 'You can evaluate the trust, ordering, custody and data-integrity assumptions behind production blockchain systems.'
+    },
+    {
+      id: 12,
+      name: 'Oracles & Data Feeds',
+      color: '#38bdf8',
+      summary: 'How outside facts get on chain, how price feeds are read without losing money, what manipulation actually costs, and the oracles that are not prices at all.',
+      outcome: 'You can state a protocol’s oracle assumption, integrate a feed with every guard, price an oracle attack against a borrow cap, and design a signed-report oracle that resists replay.'
+    },
+    {
+      id: 13,
+      name: 'Ecosystem & Architecture Choices',
+      color: '#f472b6',
+      summary: 'Choosing a chain, renting trust from RPC providers, the L2 landscape, decentralised storage, tokenomics and governance, and when not to use a blockchain at all.',
+      outcome: 'You can justify the chain, the layer, the storage backend and the governance design of a system from its requirements — and say out loud when the answer is a database.'
     }
   ],
 

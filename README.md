@@ -1,12 +1,19 @@
 # Blockchain Roadmap
 
-A complete, self-contained blockchain learning course: **52 lessons across 11 modules**, one lesson per
+A complete, self-contained blockchain learning course: **62 lessons across 13 modules**, one lesson per
 session, each with a line diagram, worked code examples and a live lab that runs in the page.
 
-Open `index.html` in a browser. That is the whole install.
+A **React 18 + Vite** shell owns the routing, navigation, progress, search and theme, and renders each
+lesson. The curriculum data, the 62 interactive labs and the 78 diagrams are the original vanilla-JS
+code — untouched, loaded as classic scripts, and wrapped by React rather than rewritten.
 
-No build step, no package manager, no server, no network access, no telemetry. Progress is stored in
-your own browser's `localStorage` and never leaves the machine.
+```bash
+npm install
+npm run dev        # http://localhost:5173
+```
+
+No network access, no telemetry. Progress is stored in your own browser's `localStorage` and never
+leaves the machine.
 
 ---
 
@@ -25,6 +32,8 @@ your own browser's `localStorage` and never leaves the machine.
 | 9 | NFTs & GameFi | 3 | metadata, marketplaces, royalties, game economies, assets and randomness |
 | 10 | DevOps & Validator Operations | 4 | node capacity, validator safety, observability, releases and recovery |
 | 11 | Advanced Protocol Systems | 5 | MEV, cross-chain messaging, smart wallets, production cryptography and reorg-safe indexing |
+| 12 | Oracles & Data Feeds | 4 | the oracle problem, push and pull feeds, feed guards, manipulation cost and TWAPs, VRF, keepers, optimistic and custom oracles |
+| 13 | Ecosystem & Architecture Choices | 6 | picking a chain, RPC providers and rented trust, the L2 landscape, decentralised storage, tokenomics and DAO governance, and when a database wins |
 
 Every lesson contains:
 
@@ -32,12 +41,12 @@ Every lesson contains:
 - **explanation** — the mechanics, including the failure modes
 - **a line diagram** — the same mechanics as a picture; it draws itself when you reach it
 - **worked code** — Move, Solidity, TypeScript, shell, all copyable
-- **a live lab** — 52 of them, listed below
+- **a live lab** — 62 of them, listed below
 - **a quiz** — with an explanation on every answer, right or wrong
 - **exercises** — the part that needs a keyboard
 - **resources** — specs, docs and primary sources
 
-Roughly 63 hours of guided material, plus the exercises.
+Roughly 75 hours of guided material, plus the exercises.
 
 ## The labs
 
@@ -97,24 +106,35 @@ These are not animations. They compute the real thing.
 | 50 | `smartwallet` | check a session-key call against target, value and expiry policy bounds |
 | 51 | `cryptops` | compare single-key, multisig and threshold-custody availability under participant failure |
 | 52 | `indexer` | ingest a chain event, then handle a reorg by updating canonical status |
+| 53 | `oraclebasics` | add faulty reporters to a committee and compare what a median and a mean do with them |
+| 54 | `oraclefeed` | fire every price-feed guard in turn: stale, negative, band-pinned, sequencer down, feeds disagreeing |
+| 55 | `oracletwap` | price an oracle attack from pool depth, TWAP window and borrow cap |
+| 56 | `oracledesign` | try to sneak a replayed, expired or double-signed report past a custom m-of-n oracle |
+| 57 | `chainfit` | eliminate chains against hard requirements — throughput, finality, language, liquidity, sovereignty |
+| 58 | `rpcpool` | break a multi-provider quorum with downed, lagging and lying endpoints behind one upstream |
+| 59 | `l2pick` | build an L2 from data location, proof type and escape hatches, then read back its stage and worst case |
+| 60 | `dstore` | price the same bytes on pinning, Arweave, Filecoin and calldata across a retention horizon |
+| 61 | `govern` | attack a DAO: buy the quorum, price the slippage, compare the cost against the treasury prize |
+| 62 | `chaintype` | run the four-question test and watch it answer "database" more often than "blockchain" |
 
 ## Running it
 
-Double-click `index.html`, or:
-
 ```bash
-open index.html
+npm install        # once
+npm run dev        # dev server with HMR at http://localhost:5173
 ```
 
-It works from `file://` — verified, including the cryptography, the labs and saved progress.
-
-If you prefer a local server (nicer URLs, no `file://` quirks in some browsers):
+To build a static bundle:
 
 ```bash
-python3 -m http.server 4173
+npm run build      # emits dist/
+npm run preview    # serves the built dist/ to check it
 ```
 
-Then open <http://localhost:4173>.
+The build uses `base: './'`, so `dist/` is fully relative — everything, including the cryptography,
+the labs and saved progress, still works when opened straight from `file://`.
+
+Node 18+ is required.
 
 ## Keyboard
 
@@ -128,26 +148,46 @@ The header buttons toggle the theme (`◐`) and reset progress (`⟲`).
 
 ## Layout
 
+The React shell lives in `src/`. The legacy engine — the parts that are hard to improve on and were
+never the point of the rewrite — lives in `public/`, served verbatim and exposed on `window`.
+
 ```
-index.html              page shell and script load order
-css/style.css           layout and components; light and dark via [data-theme]
-css/anime.css           the anime skin — palette, glow, brackets, diagram styling
-js/lib/crypto-lite.js   SHA-256, Keccak-256, secp256k1, EIP-55 — from scratch
-js/data/modules.js      module metadata + the empty lessons array
-js/data/module-1..11.js the 52 lessons
-js/diagrams.js          window.DIA — 63 inline-SVG line diagrams + their draw-in animation
-js/playground.js        window.LABS — all 52 interactive labs
-js/app.js               router, rendering, progress, theme, search, highlighter
+index.html                    Vite entry: #root, the classic <script>s, then /src/main.jsx
+vite.config.js                base: './', @vitejs/plugin-react
+
+src/main.jsx                  mounts <App/> once the window globals exist
+src/App.jsx                   shell: route + navOpen + query + theme + reset + keyboard shortcuts
+src/data.js                   derives modules/lessons/labs from window.ROADMAP + window.LABS
+src/hooks/                    useProgress (localStorage), useTheme, useHashRoute
+src/lib/                      highlight.js (syntax highlighter), flash.js (toast)
+src/components/               Topbar, Sidebar, Home, Lesson, Lab, DiagramPanel, CodeBlock, Quiz
+
+public/css/style.css          layout and components; light and dark via [data-theme]
+public/css/anime.css          the anime skin — palette, glow, brackets, diagram styling
+public/js/lib/crypto-lite.js  window.CL — SHA-256, Keccak-256, secp256k1, EIP-55 — from scratch
+public/js/data/modules.js     window.ROADMAP — module metadata + the empty lessons array
+public/js/data/module-1..13.js the 62 lessons
+public/js/diagrams.js         window.DIA — 78 inline-SVG line diagrams + their draw-in animation
+public/js/playground.js       window.LABS — all 62 interactive labs
 ```
 
-Load order matters: `crypto-lite` → `modules` → `module-1..11` → `diagrams` → `playground` → `app`.
+The classic scripts are plain `<script>` tags, so they run in order during parse — before the deferred
+React module bundle — and their globals are ready when React mounts. Load order still matters:
+`crypto-lite` → `modules` → `module-1..13` → `diagrams` → `playground`, then `/src/main.jsx`.
+
+React only owns the shell and lesson rendering. It **wraps** the imperative code rather than porting it:
+each lab is mounted with `LABS[key].mount(el)` inside a `useEffect`, and each diagram is handed to
+`DIA.animate(container)` the same way. `dangerouslySetInnerHTML` injects the lesson HTML the data files
+already carry. Nothing in `public/js/` was rewritten.
+
+The pre-React app is kept for reference at `index.legacy.html` and `public/js/app.legacy.js`.
 `anime.css` loads after `style.css` and only overrides presentation; delete it and the app still works.
 
 ## The diagrams
 
-Every lesson gets a **Diagram** panel between the explanation and the code — 37 of them, plus a
+Every lesson gets a **Diagram** panel between the explanation and the code — 78 of them, plus a
 roadmap overview on the home page. They are hand-laid inline SVG built by a small drawing kit in
-`js/diagrams.js` (`box`, `arr`, `elb`, `cur`, `flow`, `life`, `diamond`, `cyl`, …).
+`public/js/diagrams.js` (`box`, `arr`, `elb`, `cur`, `flow`, `life`, `diamond`, `cyl`, …).
 
 Nothing is rasterised and nothing is fetched. Strokes and fills read CSS custom properties, so the
 diagrams re-theme with the page and stay sharp at any zoom. Arrowheads are real polygons rather than
@@ -164,15 +204,16 @@ The mechanism is an `IntersectionObserver` plus two classes on the `<svg>` — `
 nothing runs off-screen. `prefers-reduced-motion: reduce` skips the whole thing: every diagram renders
 static and finished, and the replay button is hidden. Printing does the same.
 
-Add one by calling `add(lessonId, title, caption, width, height, svgBody)` in `js/diagrams.js`; the
-lesson picks it up automatically.
+Add one by calling `add(lessonId, title, caption, width, height, svgBody)` in `public/js/diagrams.js`;
+the lesson picks it up automatically.
 
 ### Why the crypto is hand-rolled
 
-Pages opened from `file://` are not a *secure context*, so `window.crypto.subtle` is `undefined` there.
-Rather than force a server on you, `js/lib/crypto-lite.js` implements SHA-256 (FIPS 180-4), Keccak-256
-(the pre-standard padding Ethereum uses, `0x01`, not SHA-3's `0x06`) and secp256k1 ECDSA with low-`s`
-normalisation, in plain JavaScript and `BigInt`.
+Pages opened from `file://` are not a *secure context*, so `window.crypto.subtle` is `undefined` there —
+and a `base: './'` production build is meant to open that way. Rather than depend on the platform,
+`public/js/lib/crypto-lite.js` implements SHA-256 (FIPS 180-4), Keccak-256 (the pre-standard padding
+Ethereum uses, `0x01`, not SHA-3's `0x06`) and secp256k1 ECDSA with low-`s` normalisation, in plain
+JavaScript and `BigInt`.
 
 `CL.selfTest()` runs automatically on load and prints a table to the console. It checks the published
 test vectors for both hash functions, derives a known Ethereum address, and round-trips a signature.
@@ -185,7 +226,7 @@ Run it yourself any time from the console.
 
 ## Adding a lesson
 
-1. Append to the relevant `js/data/module-N.js`:
+1. Append to the relevant `public/js/data/module-N.js`:
 
 ```js
 L.push({
@@ -204,7 +245,7 @@ L.push({
 });
 ```
 
-2. Register the lab in `js/playground.js`:
+2. Register the lab in `public/js/playground.js`:
 
 ```js
 reg('yourLabKey', 'Lab title', 'What the learner should try.', function (el) {

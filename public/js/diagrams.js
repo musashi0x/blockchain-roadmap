@@ -1214,6 +1214,422 @@
     })());
 
   /* =========================================================
+     MODULE 12 — oracles and data feeds
+     ========================================================= */
+
+  add('oracle-basics', 'Consensus starts at the fourth box',
+    'Everything left of the line is somebody’s infrastructure, and each stage fails in its own way. The chain agrees on what was published, never on whether it was true.',
+    W, 250,
+    (function () {
+      var s = txt(20, 26, 'OFF CHAIN — SOMEBODY’S INFRASTRUCTURE', 'd-k') + txt(640, 26, 'ON CHAIN', 'd-k');
+      s += line(620, 40, 620, 226, 'dash thin');
+      s += box({ x: 24, y: 86, w: 150, h: 66, t: 'sources', sub: 'venues · APIs', c: 'hot' });
+      s += box({ x: 214, y: 86, w: 150, h: 66, t: 'aggregation', sub: 'median of many', c: 'hot' });
+      s += box({ x: 404, y: 86, w: 150, h: 66, t: 'transport', sub: 'reporters sign', c: 'hot' });
+      s += box({ x: 640, y: 86, w: 110, h: 66, t: 'a transaction', sub: 'lands', c: 'acc' });
+      s += box({ x: 780, y: 86, w: 96, h: 66, t: 'your', sub: 'contract', c: 'ok' });
+      s += arr(174, 119, 214, 119, 'hot') + arr(364, 119, 404, 119, 'hot') +
+        arr(554, 119, 640, 119, 'acc') + arr(750, 119, 780, 119, 'ok');
+      s += mid(99, 182, 'thin market', 'd-s') + mid(99, 200, 'wash trades · halts', 'd-m');
+      s += mid(289, 182, '“independent” sources', 'd-s') + mid(289, 200, 'that all mirror one venue', 'd-m');
+      s += mid(479, 182, 'collusion · key loss', 'd-s') + mid(479, 200, 'censorship', 'd-m');
+      s += mid(695, 182, 'gas · congestion', 'd-s') + mid(695, 200, 'update never fires', 'd-m');
+      s += note(24, 234, 'MOST INCIDENTS ARE LIVENESS, NOT LIES — A CORRECT PRICE FROM TEN MINUTES AGO DRAINS A LENDING MARKET JUST AS WELL');
+      return s;
+    })());
+
+  add('oracle-basics', 'Push pays continuously; pull rides in the user’s transaction',
+    'The same number, two cost models. A push feed decides freshness for you and charges the operator; a pull feed lets the submitter choose which valid report to bring, which makes the acceptance window an attack surface.',
+    W, 270,
+    (function () {
+      var s = txt(20, 26, 'PUSH — THE FEED IS ALREADY THERE', 'd-k');
+      s += box({ x: 24, y: 42, w: 150, h: 52, t: 'reporters', sub: 'deviation · heartbeat', c: 'hot' });
+      s += arr(174, 68, 250, 68, 'hot');
+      s += box({ x: 250, y: 42, w: 170, h: 52, t: 'feed contract', sub: 'latestRoundData()', c: 'acc' });
+      s += arr(420, 68, 500, 68, 'acc');
+      s += box({ x: 500, y: 42, w: 150, h: 52, t: 'your contract', sub: 'a view call', c: 'ok' });
+      s += mid(775, 60, 'freshness is the', 'd-s') + mid(775, 80, 'publisher’s decision', 'd-m');
+
+      s += txt(20, 152, 'PULL — THE USER CARRIES THE REPORT', 'd-k');
+      s += box({ x: 24, y: 168, w: 150, h: 52, t: 'reporters sign', sub: 'off chain, per second', c: 'hot' });
+      s += arr(174, 194, 250, 194, 'hot');
+      s += box({ x: 250, y: 168, w: 170, h: 52, t: 'user transaction', sub: 'report + signatures', c: 'acc' });
+      s += arr(420, 194, 500, 194, 'acc');
+      s += box({ x: 500, y: 168, w: 150, h: 52, t: 'verify, then use', sub: 'quorum · expiry', c: 'ok' });
+      s += mid(775, 186, 'the submitter picks', 'd-s') + mid(775, 206, 'which valid report', 'd-m');
+      s += note(24, 254, 'PUSH: WATCH FOR STALENESS AND PAUSED UPDATES.  PULL: THE ACCEPTANCE WINDOW IS ALSO THE MANIPULATION WINDOW');
+      return s;
+    })());
+
+  add('oracle-feeds', 'Six guards, in the order the contract runs them',
+    'Each gate exists because skipping it has cost somebody money. The last line matters most: when a gate trips, the answer is a revert, not a cached price.',
+    W, 300,
+    (function () {
+      var gates = [
+        ['sequencer up', 'SequencerDown', 'restart favours', 'queued liquidators'],
+        ['grace elapsed', 'GracePeriodNotOver', 'users need time', 'to top up'],
+        ['answer > 0', 'NonPositiveAnswer', 'a negative cast', 'is a huge uint'],
+        ['inside band', 'PriceOutOfBand', 'pinned at minAnswer', 'with a fresh stamp'],
+        ['fresh enough', 'StalePrice', 'yesterday’s price', 'in today’s crash'],
+        ['feeds agree', 'FeedsDisagree', 'one is wrong and', 'you cannot tell which']
+      ];
+      var s = txt(20, 26, 'price()', 'd-k');
+      gates.forEach(function (g, i) {
+        var x = 24 + i * 146, cxp = x + 62;
+        s += box({ x: x, y: 42, w: 124, h: 56, t: g[0], c: 'ok' });
+        if (i < gates.length - 1) s += arr(x + 124, 70, x + 146, 70, 'ok');
+        s += arr(cxp, 98, cxp, 150, 'bad');
+        s += mid(cxp, 170, g[1], 'd-s') + mid(cxp, 188, g[2], 'd-m') + mid(cxp, 204, g[3], 'd-m');
+      });
+      s += mid(450, 250, 'all six pass → an 18-decimal price you may act on', 'd-t');
+      s += note(24, 284, 'A TRY/CATCH THAT FALLS BACK TO THE LAST KNOWN PRICE TURNS AN ORACLE OUTAGE INTO AN UNBOUNDED CREDIT FACILITY');
+      return s;
+    })());
+
+  add('oracle-manipulation', 'A TWAP charges rent; a spot price is free',
+    'Displacing a pool for one transaction costs fees and slippage. Holding it across a window costs that again every block, because arbitrage restores the pool and the attacker has to re-push.',
+    W, 300,
+    (function () {
+      var s = txt(20, 34, 'BLOCKS · 12 SECONDS EACH', 'd-k');
+      var labels = ['displace', 'hold', 'hold', 'hold', 'hold', 'hold', 'unwind'];
+      labels.forEach(function (t, i) {
+        var x = 24 + i * 112;
+        s += box({ x: x, y: 52, w: 92, h: 44, t: t, c: i === 0 || i === labels.length - 1 ? 'acc' : 'bad' });
+        if (i < labels.length - 1) s += arr(x + 92, 74, x + 112, 74, 'bad');
+      });
+      s += line(24, 118, 788, 118, 'dash thin');
+      s += mid(406, 140, 'every held block: arbitrage takes the other side, the attacker pays to re-push', 'd-m');
+      s += box({ x: 140, y: 178, w: 240, h: 64, t: 'cost to attacker', sub: 'fees + carry × window', c: 'ok' });
+      s += box({ x: 520, y: 178, w: 240, h: 64, t: 'prize', sub: 'whatever the caps allow', c: 'hot' });
+      s += mid(450, 216, 'vs', 'd-t');
+      s += note(24, 282, 'A SPOT ORACLE HAS NO CARRY AT ALL — AND NO WINDOW LENGTH SAVES A GENUINELY THIN MARKET, WHERE THE MANIPULATED PRICE IS THE TRUE ONE');
+      return s;
+    })());
+
+  add('oracle-beyond-price', 'An optimistic oracle prices truth in bonds',
+    'Nobody measures the answer. A proposer stakes a bond, silence for the liveness window makes it final, and a dispute escalates to a slower process that pays the winner from the loser’s bond.',
+    W, 260,
+    (function () {
+      var s = txt(20, 26, 'OPTIMISTIC ORACLE', 'd-k');
+      s += box({ x: 24, y: 60, w: 170, h: 56, t: 'propose', sub: 'answer + bond', c: 'acc' });
+      s += arr(194, 88, 234, 88, 'acc');
+      s += box({ x: 234, y: 60, w: 170, h: 56, t: 'liveness window', sub: 'hours', c: 'acc' });
+      s += elb(404, 88, 484, 46, 'ok', 'silence', 444);
+      s += box({ x: 484, y: 20, w: 170, h: 52, t: 'final', sub: 'accepted as true', c: 'ok' });
+      s += elb(404, 88, 484, 136, 'bad', 'disputed', 444);
+      s += box({ x: 484, y: 110, w: 170, h: 52, t: 'dispute', sub: 'matching bond', c: 'bad' });
+      s += arr(654, 136, 700, 136, 'bad');
+      s += box({ x: 700, y: 110, w: 176, h: 52, t: 'escalation', sub: 'loser’s bond slashed', c: 'hot' });
+      s += mid(450, 206, 'bond > what a wrong answer is worth · window > time for a watcher to notice', 'd-t');
+      s += note(24, 244, 'A $5,000 BOND ON A $10M SETTLEMENT IS NOT AN ORACLE, IT IS A DISCOUNT');
+      return s;
+    })());
+
+  /* =========================================================
+     MODULE 13 — ecosystem and architecture choices
+     ========================================================= */
+
+  add('chain-choice', 'One transfer, four models of state',
+    'The unit of state is not a detail. It decides what runs in parallel, what contends, and how you are forced to lay out your data — the same feature is idiomatic on one model and an anti-pattern on the next.',
+    W, 300,
+    (function () {
+      var cols = [
+        { t: 'UTXO', sub: 'Bitcoin', c: 'ok', a: 'consume inputs,', b: 'create outputs',
+          d: 'no shared mutable state', v: 'nothing to', v2: 'contend on' },
+        { t: 'ACCOUNTS', sub: 'EVM', c: 'acc', a: 'read and write', b: 'storage slots',
+          d: 'the block executes serially', v: 'unremarkable — it', v2: 'was serial anyway' },
+        { t: 'ACCOUNTS, DECLARED', sub: 'Solana / SVM', c: 'hot', a: 'name every account', b: 'the tx will touch',
+          d: 'disjoint sets run in parallel', v: 'serialises the', v2: 'parallel chain' },
+        { t: 'OBJECTS', sub: 'Sui / Move', c: 'ok', a: 'move an object', b: 'that you own',
+          d: 'owned writes skip consensus', v: 'a shared object:', v2: 'consensus every time' }
+      ];
+      var s = txt(20, 26, 'THE UNIT OF STATE', 'd-k');
+      cols.forEach(function (col, i) {
+        var x = 24 + i * 212, cxp = x + 100;
+        s += box({ x: x, y: 44, w: 200, h: 56, t: col.t, sub: col.sub, c: col.c });
+        s += line(cxp, 100, cxp, 118, 'thin dash');
+        s += mid(cxp, 136, col.a, 'd-s') + mid(cxp, 154, col.b, 'd-s');
+        s += mid(cxp, 180, col.d, 'd-m');
+        s += mid(cxp, 246, col.v, 'd-m') + mid(cxp, 262, col.v2, 'd-m');
+      });
+      s += line(24, 208, 860, 208, 'thin');
+      s += txt(24, 230, 'ONE GLOBAL COUNTER, INCREMENTED BY EVERY USER:', 'd-k');
+      s += note(24, 288, 'PICK THE MODEL YOUR STATE ALREADY LOOKS LIKE. THE REWRITE COST IS PAID ONCE, BY YOU, LATER');
+      return s;
+    })());
+
+  add('chain-choice', 'Finality is a spectrum, and each point fails differently',
+    'Read a finality claim by asking two things: what has to go wrong for a confirmed write to be undone, and what the chain does when it happens — revert, or stop.',
+    W, 300,
+    (function () {
+      var marks = [
+        { x: 130, t: '≈1 second', n: 'BFT COMMIT', s: 'Cosmos · Sui', f1: 'below quorum the chain', f2: 'halts rather than reverts' },
+        { x: 340, t: '≈13 seconds', n: 'SOLANA ROOTED', s: 'optimistic first', f1: 'skipped slots can undo', f2: 'a confirmation, not a root' },
+        { x: 560, t: '≈13 minutes', n: 'ETHEREUM FINALISED', s: 'two epochs', f1: 'inactivity leak: finality', f2: 'stalls, blocks keep coming' },
+        { x: 790, t: '≈7 days', n: 'ROLLUP ON L1', s: 'challenge window', f1: 'until it closes you hold', f2: 'a sequencer’s promise' }
+      ];
+      var s = txt(20, 26, 'HOW LONG UNTIL A WRITE CANNOT BE UNDONE', 'd-k');
+      s += line(60, 150, 866, 150, 'thin');
+      marks.forEach(function (m) {
+        s += mid(m.x, 62, m.t, 'd-t');
+        s += mid(m.x, 82, m.n, 'd-k');
+        s += mid(m.x, 100, m.s, 'd-m');
+        s += line(m.x, 110, m.x, 142, 'thin dash');
+        s += dot(m.x, 150, 4, 'acc');
+        s += mid(m.x, 186, m.f1, 'd-m');
+        s += mid(m.x, 202, m.f2, 'd-m');
+      });
+      s += txt(20, 244, 'AND WHEN THE ASSUMPTION BREAKS', 'd-k');
+      s += mid(450, 268, 'proof of work never finalises at all — depth buys confidence, never certainty', 'd-s');
+      s += note(24, 292, 'THE PRODUCT QUESTION IS NOT "HOW FAST" BUT "WHAT DO I DO DURING THE WAIT"');
+      return s;
+    })());
+
+  add('rpc-providers', 'Between your dApp and the chain sits somebody’s server',
+    'Consensus protects signatures and block contents, so a provider cannot forge anything. What it controls is what it chooses to tell you, and whether it relays what you send.',
+    W, 300,
+    (function () {
+      var s = txt(20, 26, 'THE TRUST BOUNDARY YOU RENT', 'd-k');
+      s += box({ x: 24, y: 108, w: 170, h: 68, t: 'your dApp', sub: 'reads + broadcasts', c: 'ok' });
+      s += arr(194, 142, 296, 142, 'ok');
+      s += box({ x: 296, y: 100, w: 224, h: 84, t: 'RPC provider', sub: 'somebody else’s node', c: 'hot' });
+      s += arr(520, 142, 618, 142, 'acc');
+      s += cyl(618, 96, 236, 92, 'the chain', 'acc');
+      s += mid(408, 50, 'WHAT IT CAN DO', 'd-k');
+      s += mid(408, 70, 'stale state · dropped broadcast · missing logs · 429 at your peak', 'd-m');
+      s += line(408, 78, 408, 100, 'thin dash');
+      s += line(408, 184, 408, 206, 'thin dash');
+      s += mid(408, 224, 'WHAT IT CANNOT DO', 'd-k');
+      s += mid(408, 244, 'forge a signature · mint tokens · rewrite a finalised block', 'd-m');
+      s += note(24, 288, 'EVERY ONE OF THESE FAILURES LOOKS EXACTLY LIKE AN ORDINARY OUTAGE — AND EXACTLY LIKE AN ATTACK');
+      return s;
+    })());
+
+  add('rpc-providers', 'Quorum of three, one of them wrong',
+    'Compare heads first, then values. A provider outside your lag tolerance is a broken input rather than a slow one, and disagreement is a signal to surface, never to average away.',
+    W, 300,
+    (function () {
+      var s = txt(20, 26, 'READ PATH WITH QUORUM', 'd-k');
+      s += box({ x: 24, y: 120, w: 160, h: 68, t: 'read path', sub: 'lag check, then vote', c: 'ok' });
+      s += arr(184, 140, 276, 72, 'thin');
+      s += arr(184, 154, 276, 152, 'thin');
+      s += arr(184, 168, 276, 232, 'thin');
+      s += box({ x: 276, y: 44, w: 214, h: 56, t: 'provider A', sub: 'head 19,000,412', c: 'ok' });
+      s += box({ x: 276, y: 124, w: 214, h: 56, t: 'provider B', sub: 'head 19,000,412', c: 'ok' });
+      s += box({ x: 276, y: 204, w: 214, h: 56, t: 'provider C', sub: 'head 19,000,398', c: 'bad' });
+      s += arr(490, 72, 692, 132, 'ok');
+      s += arr(490, 152, 692, 152, 'ok');
+      s += line(490, 232, 600, 232, 'bad dash');
+      s += mid(690, 236, 'dropped: 14 blocks behind', 'd-m');
+      s += box({ x: 696, y: 118, w: 180, h: 68, t: 'agreed value', sub: '2 of 2 fresh', c: 'acc' });
+      s += note(24, 292, 'THREE ENDPOINTS BEHIND ONE UPSTREAM ARE ONE ENDPOINT — CHECK WHOSE INFRASTRUCTURE YOU ARE ACTUALLY ON');
+      return s;
+    })());
+
+  add('l2-landscape', 'Where the data goes decides what you can prove',
+    'Ignore the branding and ask two questions of any scaling design: is the transaction data published where anyone can rebuild state, and what convinces L1 that the new root is right?',
+    W, 330,
+    (function () {
+      var rows = [
+        { t: 'DATA ON L1', sub: 'anyone can rebuild state', c: 'ok',
+          cells: [{ t: 'ZK rollup', s: 'validity proof on L1', c: 'ok' },
+                  { t: 'optimistic rollup', s: 'challenge window', c: 'ok' },
+                  null] },
+        { t: 'DATA OFF CHAIN', sub: 'a committee holds it', c: 'hot',
+          cells: [{ t: 'validium', s: 'proofs valid, exit blocked', c: 'hot' },
+                  { t: 'plasma', s: 'exit games — it lost', c: 'bad' },
+                  null] },
+        { t: 'ITS OWN CHAIN', sub: 'separate validator set', c: 'bad',
+          cells: [null, null, { t: 'sidechain + bridge', s: 'two trust assumptions', c: 'bad' }] }
+      ];
+      var s = txt(20, 26, 'DATA AVAILABILITY  ×  WHAT PROVES THE TRANSITION', 'd-k');
+      var heads = ['VALIDITY PROOF', 'FRAUD PROOF', 'EXTERNAL CONSENSUS'];
+      heads.forEach(function (h, c) { s += mid(330 + c * 200, 62, h, 'd-k'); });
+      rows.forEach(function (r, i) {
+        var y = 78 + i * 74;
+        s += box({ x: 24, y: y, w: 196, h: 60, t: r.t, sub: r.sub, c: r.c });
+        r.cells.forEach(function (cell, c) {
+          var x = 240 + c * 200;
+          if (cell) s += box({ x: x, y: y, w: 180, h: 60, t: cell.t, sub: cell.s, c: cell.c });
+          else s += mid(x + 90, y + 36, '—', 'd-m');
+        });
+      });
+      s += mid(450, 302, 'the surviving row is the one that publishes its data', 'd-t');
+      s += note(24, 324, 'EVERY DESIGN THAT LOST, LOST ON DATA AVAILABILITY. PAYMENT CHANNELS SURVIVED BY NARROWING THE PROBLEM INSTEAD');
+      return s;
+    })());
+
+  add('l2-landscape', 'Four ways out, four different clocks',
+    'Deposits are fast everywhere. Withdrawals are where the design shows up — and a fast bridge is not a faster protocol, it is somebody fronting you funds and taking the wait themselves.',
+    W, 300,
+    (function () {
+      var paths = [
+        { n: 'canonical · optimistic', w: 540, c: 'acc', d: '≈7 days · protocol trust only', inside: true },
+        { n: 'canonical · ZK', w: 150, c: 'ok', d: '≈hours · plus prover liveness' },
+        { n: 'fast / liquidity bridge', w: 56, c: 'hot', d: '≈minutes · plus a fee and a counterparty' },
+        { n: 'forced inclusion via L1', w: 240, c: 'bad', d: '≈hours to a day · the escape hatch, highest gas' }
+      ];
+      var s = txt(20, 26, 'TIME UNTIL THE FUNDS ARE ON L1', 'd-k');
+      paths.forEach(function (p, i) {
+        var y = 56 + i * 58;
+        s += txt(24, y + 22, p.n, 'd-s');
+        s += box({ x: 250, y: y, w: p.w, h: 30, t: p.inside ? p.d : '', c: p.c });
+        if (!p.inside) s += txt(250 + p.w + 14, y + 20, p.d, 'd-m');
+      });
+      s += line(250, 292, 250, 44, 'thin dash');
+      s += note(24, 292, 'THE CANONICAL PATH IS THE ONE THAT SURVIVES EVERYONE ELSE FAILING — MEASURE THE OTHERS AGAINST IT');
+      return s;
+    })());
+
+  add('dstorage', 'Hash on chain, bytes somewhere cheaper',
+    'The chain stores the commitment, not the content. That keeps tampering detectable at a cost you can afford — provided somebody actually verifies the bytes against the root.',
+    W, 310,
+    (function () {
+      var s = txt(20, 26, 'ANCHORING', 'd-k');
+      ['file A', 'file B', 'file C'].forEach(function (f, i) {
+        s += box({ x: 24, y: 48 + i * 52, w: 150, h: 42, t: f, sub: 'sha256', c: 'ok' });
+        s += arr(174, 69 + i * 52, 228, 118, 'thin');
+      });
+      s += box({ x: 228, y: 90, w: 180, h: 84, t: 'manifest', sub: 'path + digest', sub2: 'sorted, canonical', c: 'acc' });
+      s += arr(408, 132, 470, 132, 'acc');
+      s += box({ x: 470, y: 100, w: 170, h: 64, t: 'merkle root', sub: '0x9c4a…', c: 'hot' });
+      s += arr(640, 132, 700, 132, 'hot');
+      s += cyl(700, 92, 176, 84, 'root + locator', 'acc');
+      s += elbV(99, 204, 400, 224, 'ok', '', 214);
+      s += box({ x: 240, y: 224, w: 400, h: 52, t: 'IPFS · Arweave · Filecoin', sub: 'the bytes live here, off chain', c: 'ok' });
+      s += arr(640, 250, 786, 250, 'thin', 'verify');
+      s += mid(786, 214, 'recompute the root', 'd-m');
+      s += note(24, 302, 'A CID PROVES INTEGRITY, NEVER AVAILABILITY. NOBODY IS OBLIGED TO KEEP SERVING YOUR BYTES');
+      return s;
+    })());
+
+  add('dstorage', 'Three ways to pay for keeping bytes alive',
+    'Pinning bills you forever, an endowment bills you once and bets on falling costs, a storage deal bills per epoch and slashes a provider that stops proving. Each buys a different failure.',
+    W, 290,
+    (function () {
+      var cols = [
+        { t: 'PINNING', sub: 'IPFS', c: 'acc', ticks: 7, f1: 'stops the moment', f2: 'the invoice stops' },
+        { t: 'ENDOWMENT', sub: 'Arweave', c: 'ok', ticks: 1, f1: 'bets that storage costs', f2: 'keep falling, forever' },
+        { t: 'STORAGE DEALS', sub: 'Filecoin', c: 'hot', ticks: 5, f1: 'provider is slashed', f2: 'if proofs stop arriving' }
+      ];
+      var s = txt(20, 26, 'PAYMENT OVER TIME', 'd-k');
+      cols.forEach(function (col, i) {
+        var x = 24 + i * 296, cxp = x + 130;
+        s += box({ x: x, y: 44, w: 260, h: 56, t: col.t, sub: col.sub, c: col.c });
+        s += line(x + 10, 150, x + 250, 150, 'thin');
+        for (var k = 0; k < col.ticks; k++) {
+          var tx = col.ticks === 1 ? x + 20 : x + 20 + k * (220 / (col.ticks - 1));
+          s += line(tx, 150, tx, col.ticks === 1 ? 112 : 130, col.c);
+          s += dot(tx, 150, 3, col.c);
+        }
+        s += mid(cxp, 172, col.ticks === 1 ? 'one payment, up front' : 'a payment every period', 'd-m');
+        s += mid(cxp, 214, col.f1, 'd-s') + mid(cxp, 232, col.f2, 'd-s');
+      });
+      s += note(24, 278, 'ENCRYPT BEFORE UPLOAD. A CID IS AN ADDRESS, NOT A PASSWORD, AND ARWEAVE HAS NO DELETE');
+      return s;
+    })());
+
+  add('tokenomics-dao', 'A proposal’s clock is its main defence',
+    'Snapshot voting power stops borrowed votes; the timelock turns a governance takeover from an instant theft into a public countdown that holders and a guardian can act inside.',
+    W, 310,
+    (function () {
+      var s = txt(20, 26, 'THE GOVERNANCE PIPELINE', 'd-k');
+      s += flow(26, 110, 126, 56, 18, [
+        { t: 'snapshot', sub: 'block N−1', c: 'ok' },
+        { t: 'propose', sub: 'weights fixed', c: 'ok' },
+        { t: 'vote', sub: '3 days', c: 'acc' },
+        { t: 'quorum', sub: '4% of supply', c: 'acc' },
+        { t: 'timelock', sub: '2 days', c: 'hot' },
+        { t: 'execute', sub: 'the call runs', c: 'hot' }
+      ], 'acc');
+      s += box({ x: 277, y: 18, w: 200, h: 42, t: 'flash loan', sub: 'borrow · vote · repay', c: 'bad' });
+      s += arr(377, 60, 377, 106, 'bad', 'weight 0');
+      s += mid(660, 38, 'balances were checkpointed', 'd-m');
+      s += mid(660, 54, 'before the loan existed', 'd-m');
+      s += box({ x: 570, y: 218, w: 190, h: 52, t: 'guardian', sub: 'cancel only, never execute', c: 'ok' });
+      s += arr(665, 216, 665, 172, 'ok');
+      s += mid(300, 232, 'a passed proposal is a public countdown', 'd-s');
+      s += mid(300, 252, 'holders can exit inside it', 'd-m');
+      s += note(24, 300, 'SNAPSHOT WITHOUT A TIMELOCK STILL LOSES THE TREASURY IN ONE BLOCK AFTER A VOTE YOU DID NOT NOTICE');
+      return s;
+    })());
+
+  add('tokenomics-dao', 'Price the capture, then compare it with the prize',
+    'Governance security is a number. Work out what it costs an attacker to move the treasury, adjust for turnout and vote rental, and put it next to what the treasury is worth.',
+    W, 300,
+    (function () {
+      var bars = [
+        { n: 'buy 4% of circulating supply', w: 200, c: 'acc', d: 'the quoted, naive cost' },
+        { n: '+ price impact on a thin book', w: 300, c: 'hot', d: 'the real cost of acquiring it' },
+        { n: 'or rent the votes instead', w: 90, c: 'bad', d: 'bribe markets sell a single vote' }
+      ];
+      var s = txt(20, 26, 'COST TO PASS A MALICIOUS PROPOSAL', 'd-k');
+      bars.forEach(function (b, i) {
+        var y = 54 + i * 52;
+        s += txt(24, y + 22, b.n, 'd-s');
+        s += box({ x: 320, y: y, w: b.w, h: 30, t: '', c: b.c });
+        s += txt(320 + b.w + 14, y + 20, b.d, 'd-m');
+      });
+      s += line(24, 224, 876, 224, 'thin');
+      s += txt(24, 264, 'TREASURY AT RISK', 'd-k');
+      s += box({ x: 320, y: 244, w: 540, h: 30, t: 'everything one proposal can spend', c: 'hot' });
+      s += mid(450, 210, 'with habitual turnout of 5%, a 4% quorum is a rounding error, not a bar', 'd-m');
+      s += note(24, 294, 'IF THE PRIZE EXCEEDS THE CAPTURE COST, THE PROTOCOL IS NOT GOVERNED — IT IS A STANDING OFFER');
+      return s;
+    })());
+
+  add('chain-types', 'Four questions before anyone says blockchain',
+    'A shared ledger is the right answer only when all four hold. Fail one and something simpler wins — and the simpler thing usually ships a year sooner for a fifth of the money.',
+    W, 330,
+    (function () {
+      var qs = [
+        { q: '2+ writing orgs?', o1: 'signed append-only log', o2: 'one writer needs a database' },
+        { q: 'mutual distrust?', o1: 'shared schema and API', o2: 'integration, not consensus' },
+        { q: 'no intermediary?', o1: 'use the intermediary', o2: 'and anchor its log publicly' },
+        { q: 'shared ordering?', o1: 'independent logs', o2: 'cross-anchored roots' }
+      ];
+      var s = txt(20, 26, 'THE TEST', 'd-k');
+      qs.forEach(function (q, i) {
+        var x = 24 + i * 192, cxp = x + 85;
+        s += diamond(x, 52, 170, 80, q.q, i < 2 ? 'ok' : 'acc');
+        if (i < qs.length - 1) s += arr(x + 170, 92, x + 192, 92, 'ok', 'yes');
+        s += arr(cxp, 132, cxp, 158, 'bad', 'no');
+        s += mid(cxp, 182, q.o1, 'd-s');
+        s += mid(cxp, 200, q.o2, 'd-m');
+      });
+      s += elbV(770, 92, 450, 232, 'hot', '', 216);
+      s += box({ x: 250, y: 232, w: 400, h: 58, t: 'a shared ledger earns its place', sub: 'public if strangers transact · permissioned if the writers are named', c: 'hot' });
+      s += note(24, 320, 'MOST ENTERPRISE PILOTS DIED ON QUESTION ONE OR QUESTION THREE, AND NONE OF THEM DIED ON THE TECHNOLOGY');
+      return s;
+    })());
+
+  add('chain-types', 'Same ledger, three trust models',
+    'Removing open participation removes the Sybil problem and the censorship resistance in the same move. What is left is classical BFT among named parties — and a governance project.',
+    W, 290,
+    (function () {
+      var cols = [
+        { t: 'PUBLIC', sub: 'permissionless', c: 'ok',
+          r: ['anyone with stake or hashpower', 'sybil resistance is required', 'strangers cannot be excluded'] },
+        { t: 'CONSORTIUM', sub: 'named validators', c: 'acc',
+          r: ['firms under a contract', 'BFT — no sybil problem left', 'members can collude, and dissolve'] },
+        { t: 'PRIVATE', sub: 'one organisation', c: 'bad',
+          r: ['you', 'no consensus needed at all', 'a database, with extra latency'] }
+      ];
+      var labels = ['WHO VALIDATES', 'WHAT CONSENSUS SOLVES', 'WHAT BREAKS IT'];
+      var s = txt(20, 26, 'WHAT PERMISSIONING CHANGES', 'd-k');
+      cols.forEach(function (col, i) {
+        var x = 190 + i * 235;
+        s += box({ x: x, y: 44, w: 220, h: 56, t: col.t, sub: col.sub, c: col.c });
+        col.r.forEach(function (line1, k) { s += mid(x + 110, 140 + k * 38, line1, 'd-m'); });
+      });
+      labels.forEach(function (l, k) { s += txt(24, 140 + k * 38, l, 'd-k'); });
+      s += line(24, 232, 876, 232, 'thin');
+      s += mid(450, 258, 'one writer plus an audience is never the consortium case', 'd-s');
+      s += note(24, 284, 'A CHAIN RUN BY ONE ORGANISATION ASKS AUDITORS TO TRUST THAT ORGANISATION — EXACTLY AS A DATABASE DOES');
+      return s;
+    })());
+
+  /* =========================================================
      HOME — the whole roadmap on one line
      ========================================================= */
 
@@ -1237,7 +1653,8 @@
       1: 'hash · signatures', 2: 'UTXO · PoW · PoS', 3: 'EVM · gas · ERC',
       4: 'test · deploy', 5: 'exploit · defend', 6: 'AMM · rollup · ZK',
       7: 'objects · Move', 8: 'quorum · anchors', 9: 'metadata · sinks',
-      10: 'nodes · alerts', 11: 'MEV · bridges'
+      10: 'nodes · alerts', 11: 'MEV · bridges', 12: 'feeds · reports',
+      13: 'chains · DAOs'
     };
     mods.forEach(function (m, i) {
       var r = Math.floor(i / perRow), c = i % perRow;
@@ -1254,9 +1671,11 @@
     // wrap connector: out of the last box on row one, around, into row two
     if (rows > 1 && mods.length > perRow) {
       var lastX = x0 + (perRow - 1) * pitch + bw, midY = rowY(0) + bh / 2, turnY = rowY(1) - 16;
-      body += line(lastX, midY, 812, midY, 'thin dash');
-      body += line(812, midY, 812, turnY, 'thin dash');
-      body += line(812, turnY, x0 + bw / 2, turnY, 'thin dash');
+      // the rail sits just outside the last box, whatever width the row ended up
+      var rail = Math.min(892, lastX + 12);
+      body += line(lastX, midY, rail, midY, 'thin dash');
+      body += line(rail, midY, rail, turnY, 'thin dash');
+      body += line(rail, turnY, x0 + bw / 2, turnY, 'thin dash');
       body += arr(x0 + bw / 2, turnY, x0 + bw / 2, rowY(1), 'acc');
     }
     s += body;
