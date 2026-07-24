@@ -1,10 +1,10 @@
 # Blockchain Roadmap
 
-A complete, self-contained blockchain learning course: **62 lessons across 13 modules**, one lesson per
+A complete, self-contained blockchain learning course: **66 lessons across 14 modules**, one lesson per
 session, each with a line diagram, worked code examples and a live lab that runs in the page.
 
 A **React 18 + Vite** shell owns the routing, navigation, progress, search and theme, and renders each
-lesson. The curriculum data, the 62 interactive labs and the 78 diagrams are the original vanilla-JS
+lesson. The curriculum data, the 66 interactive labs and the 84 diagrams are the original vanilla-JS
 code — untouched, loaded as classic scripts, and wrapped by React rather than rewritten.
 
 ```bash
@@ -34,6 +34,7 @@ leaves the machine.
 | 11 | Advanced Protocol Systems | 5 | MEV, cross-chain messaging, smart wallets, production cryptography and reorg-safe indexing |
 | 12 | Oracles & Data Feeds | 4 | the oracle problem, push and pull feeds, feed guards, manipulation cost and TWAPs, VRF, keepers, optimistic and custom oracles |
 | 13 | Ecosystem & Architecture Choices | 6 | picking a chain, RPC providers and rented trust, the L2 landscape, decentralised storage, tokenomics and DAO governance, and when a database wins |
+| 14 | Chainlink Core Stack | 4 | OCR data-feed architecture, safe feed integration and monitoring, VRF request lifecycles, and idempotent Automation upkeeps |
 
 Every lesson contains:
 
@@ -41,12 +42,12 @@ Every lesson contains:
 - **explanation** — the mechanics, including the failure modes
 - **a line diagram** — the same mechanics as a picture; it draws itself when you reach it
 - **worked code** — Move, Solidity, TypeScript, shell, all copyable
-- **a live lab** — 62 of them, listed below
+- **a live lab** — 66 of them, listed below
 - **a quiz** — with an explanation on every answer, right or wrong
 - **exercises** — the part that needs a keyboard
 - **resources** — specs, docs and primary sources
 
-Roughly 75 hours of guided material, plus the exercises.
+Roughly 80 hours of guided material, plus the exercises.
 
 ## The labs
 
@@ -116,6 +117,10 @@ These are not animations. They compute the real thing.
 | 60 | `dstore` | price the same bytes on pinning, Arweave, Filecoin and calldata across a retention horizon |
 | 61 | `govern` | attack a DAO: buy the quorum, price the slippage, compare the cost against the treasury prize |
 | 62 | `chaintype` | run the four-question test and watch it answer "database" more often than "blockchain" |
+| 63 | `chainlinkocr` | trace a price from sources through an OCR quorum and identify the trust boundary at every stage |
+| 64 | `chainlinkfeed` | normalise feed decimals, trip freshness checks and choose an outage policy for each risk action |
+| 65 | `chainlinkvrf` | follow concurrent VRF requests through delayed fulfilment and safe, separate claims |
+| 66 | `chainlinkautomation` | process a bounded upkeep backlog while handling stale simulations and repeated calls |
 
 ## Running it
 
@@ -166,9 +171,9 @@ public/css/style.css          layout and components; light and dark via [data-th
 public/css/anime.css          the anime skin — palette, glow, brackets, diagram styling
 public/js/lib/crypto-lite.js  window.CL — SHA-256, Keccak-256, secp256k1, EIP-55 — from scratch
 public/js/data/modules.js     window.ROADMAP — module metadata + the empty lessons array
-public/js/data/module-1..13.js the 62 lessons
-public/js/diagrams.js         window.DIA — 78 inline-SVG line diagrams + their draw-in animation
-public/js/playground.js       window.LABS — all 62 interactive labs
+public/js/data/module-1..14.js the 66 lessons
+public/js/diagrams.js         window.DIA — 84 inline-SVG line diagrams + their draw-in animation
+public/js/playground.js       window.LABS — all 66 interactive labs
 ```
 
 The classic scripts are plain `<script>` tags, so they run in order during parse — before the deferred
@@ -185,7 +190,7 @@ The pre-React app is kept for reference at `index.legacy.html` and `public/js/ap
 
 ## The diagrams
 
-Every lesson gets a **Diagram** panel between the explanation and the code — 78 of them, plus a
+Every lesson gets a **Diagram** panel between the explanation and the code — 84 of them, plus a
 roadmap overview on the home page. They are hand-laid inline SVG built by a small drawing kit in
 `public/js/diagrams.js` (`box`, `arr`, `elb`, `cur`, `flow`, `life`, `diamond`, `cyl`, …).
 

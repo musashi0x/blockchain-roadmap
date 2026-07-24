@@ -4,7 +4,7 @@ window.ROADMAP = {
   meta: {
     title: 'Blockchain Roadmap',
     tagline: 'From hash functions to deployed DeFi contracts, one session at a time.',
-    totalHours: 75
+    totalHours: 90
   },
 
   modules: [
@@ -98,6 +98,27 @@ window.ROADMAP = {
       color: '#f472b6',
       summary: 'Choosing a chain, renting trust from RPC providers, the L2 landscape, decentralised storage, tokenomics and governance, and when not to use a blockchain at all.',
       outcome: 'You can justify the chain, the layer, the storage backend and the governance design of a system from its requirements — and say out loud when the answer is a database.'
+    },
+    {
+      id: 14,
+      name: 'Chainlink Core Stack',
+      color: '#2a5ada',
+      summary: 'A deep dive into the production oracle network: how OCR aggregates off chain, how an AggregatorV3 feed and its proxy are wired, how a VRF request is funded and fulfilled, and how Automation turns checkUpkeep into a trust-minimised keeper.',
+      outcome: 'You can integrate a Chainlink feed with the right guards, request verifiable randomness safely, hand a job to a keeper with idempotent code, and explain the on-chain and off-chain trust behind every Chainlink call.'
+    },
+    {
+      id: 15,
+      name: 'Chainlink CCIP',
+      color: '#5e29c5',
+      summary: 'A cross-chain messaging and token-transfer protocol with a separate Risk Management Network, a commit-then-verify pipeline, a sequencing scheme that prevents replay, and two token-transfer modes with rate limits.',
+      outcome: 'You can send arbitrary data or move tokens between chains with CCIP, reason about its two-stage security model, and size a transfer against its rate limits before relying on it for production volume.'
+    },
+    {
+      id: 16,
+      name: 'Chainlink Functions & Data Streams',
+      color: '#3a8ee6',
+      summary: 'Serverless off-chain code whose result is attested by a DON (Functions), and low-latency signed reports for derivatives and perps (Data Streams) — plus a decision procedure for picking the right Chainlink service for a given problem.',
+      outcome: 'You can describe when Functions beats a push feed, when Data Streams beats a pull feed, and you can name, from a one-paragraph product requirement, the Chainlink service that fits.'
     }
   ],
 

@@ -3591,6 +3591,132 @@ STOP</textarea></div>
       $$(el, 'input').forEach(i => { i.oninput = run; i.onchange = run; }); run();
     });
 
+  /* ============================================================
+     MODULE 14 — Chainlink core stack
+     ============================================================ */
+
+  reg('chainlinkocr', 'OCR trust-boundary tracer',
+    'Change the health of the market, node committee and consumer policy. Each stage answers a different question; no green light can compensate for a red one downstream.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Independent market sources</label><input id="co-sources" type="number" value="7" min="1" max="30"></div>
+          <div class="field"><label>Faulty / correlated sources</label><input id="co-badsource" type="number" value="1" min="0" max="30"></div>
+          <div class="field"><label>DON nodes</label><input id="co-nodes" type="number" value="31" min="1" max="99"></div>
+          <div class="field"><label>Unavailable / faulty nodes</label><input id="co-badnodes" type="number" value="3" min="0" max="99"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Report age (seconds)</label><input id="co-age" type="number" value="30" min="0" step="10"></div>
+          <div class="field"><label>Consumer max age (seconds)</label><input id="co-max" type="number" value="90" min="1" step="10"></div>
+        </div><div class="out" id="co-out"></div>`;
+      function run() {
+        const sources = Math.max(1, Number($(el, '#co-sources').value) || 1);
+        const badSource = Math.max(0, Number($(el, '#co-badsource').value) || 0);
+        const nodes = Math.max(1, Number($(el, '#co-nodes').value) || 1);
+        const badNodes = Math.max(0, Number($(el, '#co-badnodes').value) || 0);
+        const age = Math.max(0, Number($(el, '#co-age').value) || 0);
+        const max = Math.max(1, Number($(el, '#co-max').value) || 1);
+        const sourceOk = badSource < Math.ceil(sources / 2);
+        const quorumOk = badNodes < Math.ceil(nodes / 3); // teaching model for a BFT-style DON
+        const fresh = age <= max;
+        const row = (yes, stage, detail) => '  ' + (yes ? '<span class="good">PASS</span>' : '<span class="bad">FAIL</span>') +
+          '  ' + stage + '   <span class="dim">' + detail + '</span>';
+        $(el, '#co-out').innerHTML =
+          'PRICE → SOURCES → OCR REPORT → AGGREGATOR → CONSUMER\n' +
+          row(sourceOk, 'source aggregation', badSource + ' faulty/correlated of ' + sources + ' independent sources') + '\n' +
+          row(quorumOk, 'DON report quorum', badNodes + ' unavailable/faulty of ' + nodes + ' nodes') + '\n' +
+          row(true, 'on-chain aggregator', 'an authorised report can be stored') + '\n' +
+          row(fresh, 'consumer freshness policy', 'age ' + age + 's, policy ' + max + 's') + '\n\n' +
+          (sourceOk && quorumOk && fresh
+            ? '<span class="good">A consumer may use the report under these assumptions.</span>'
+            : '<span class="bad">Do not use this report for risk-increasing actions.</span>') +
+          '\n\n<span class="dim">The quorum test does not repair a broken market. If sources are correlated, more oracle nodes can faithfully agree on the same bad input.</span>';
+      }
+      $$(el, 'input').forEach(i => i.oninput = run); run();
+    });
+
+  reg('chainlinkfeed', 'Feed integration gate',
+    'Normalise a Chainlink-style answer and decide which protocol actions survive an outage. The point is to make the policy explicit before the emergency.',
+    function (el) {
+      el.innerHTML = `
+        <div class="row">
+          <div class="field"><label>Answer</label><input id="cf-answer" type="number" value="2000" step="1"></div>
+          <div class="field"><label>Feed decimals</label><select id="cf-dec"><option>8</option><option>6</option><option selected>18</option></select></div>
+          <div class="field"><label>Age (seconds)</label><input id="cf-age" type="number" value="300" min="0" step="30"></div>
+          <div class="field"><label>Maximum age</label><input id="cf-max" type="number" value="3600" min="1" step="60"></div>
+        </div><div class="out" id="cf-out"></div>`;
+      function run() {
+        const answer = Number($(el, '#cf-answer').value) || 0;
+        const dec = Number($(el, '#cf-dec').value);
+        const age = Math.max(0, Number($(el, '#cf-age').value) || 0);
+        const max = Math.max(1, Number($(el, '#cf-max').value) || 1);
+        const healthy = answer > 0 && age <= max;
+        const price18 = answer > 0 ? answer * Math.pow(10, 18 - dec) : 0;
+        $(el, '#cf-out').innerHTML =
+          'PRICE BOUNDARY\n' +
+          '  answer > 0                 ' + (answer > 0 ? '<span class="good">pass</span>' : '<span class="bad">REVERT</span>') + '\n' +
+          '  age ≤ maxAge                ' + (age <= max ? '<span class="good">pass</span>' : '<span class="bad">REVERT</span>') + '   ' + age + 's / ' + max + 's\n' +
+          (healthy ? '  normalised USD (18 decimals) ' + price18.toExponential(4) + '\n' : '') + '\n' +
+          'ACTION POLICY\n' +
+          '  open borrow / mint          ' + (healthy ? '<span class="good">allow</span>' : '<span class="bad">block</span>') + '\n' +
+          '  withdraw collateral          ' + (healthy ? '<span class="good">allow if healthy</span>' : '<span class="bad">block</span>') + '\n' +
+          '  repay / add collateral       <span class="good">allow</span>\n\n' +
+          '<span class="dim">The displayed integer is answer × 10^(18 - feed decimals). Keeping this conversion at one boundary prevents a hidden 8-decimal assumption from spreading through the protocol.</span>';
+      }
+      $$(el, 'input, select').forEach(i => { i.oninput = run; i.onchange = run; }); run();
+    });
+
+  reg('chainlinkvrf', 'Concurrent VRF request tracker',
+    'Issue requests, fulfil them in any order, and claim each result. Request ids—not a global “current player”—keep asynchronous callbacks attached to the right user.',
+    function (el) {
+      let next = 1;
+      const requests = {};
+      el.innerHTML = `<div class="row"><button class="btn primary" id="cv-request">Request random word</button><button class="btn" id="cv-fulfil">Fulfil oldest pending</button><button class="btn" id="cv-claim">Claim oldest fulfilled</button></div><div class="out" id="cv-out"></div>`;
+      function render(note) {
+        const rows = Object.keys(requests).map(id => {
+          const r = requests[id];
+          return '  #' + id + '  ' + r.player + '  ' + (r.fulfilled ? 'word ' + r.word : 'pending') + (r.claimed ? '  <span class="dim">claimed</span>' : '');
+        });
+        $(el, '#cv-out').innerHTML = 'REQUEST STATE\n' + (rows.length ? rows.join('\n') : '  no requests') +
+          '\n\n' + (note || '<span class="dim">Fulfilment records a result only; claim performs settlement later.</span>');
+      }
+      $(el, '#cv-request').onclick = () => { const id = next++; requests[id] = { player: 'player-' + id, fulfilled: false, claimed: false }; render('<span class="good">Requested #' + id + ' and bound it to player-' + id + '.</span>'); };
+      $(el, '#cv-fulfil').onclick = () => {
+        const id = Number(Object.keys(requests).find(k => !requests[k].fulfilled));
+        if (!id) return render('<span class="bad">No pending request to fulfil.</span>');
+        requests[id].fulfilled = true; requests[id].word = (id * 2654435761) >>> 0;
+        render('<span class="good">Coordinator stored word for #' + id + '. No prize was minted in the callback.</span>');
+      };
+      $(el, '#cv-claim').onclick = () => {
+        const id = Number(Object.keys(requests).find(k => requests[k].fulfilled && !requests[k].claimed));
+        if (!id) return render('<span class="bad">No fulfilled, unclaimed request.</span>');
+        requests[id].claimed = true; render('<span class="good">player-' + id + ' claimed settlement for #' + id + '.</span>');
+      };
+      render();
+    });
+
+  reg('chainlinkautomation', 'Bounded upkeep backlog',
+    'Let a simulated range become stale, then run it twice. A cursor plus per-job completion checks turns duplicate calls into harmless no-ops and keeps gas bounded.',
+    function (el) {
+      let cursor = 0, jobs = 37, planned = null, settled = new Set();
+      el.innerHTML = `<div class="row"><div class="field"><label>Total jobs</label><input id="ca-jobs" type="number" value="37" min="0" max="200"></div><button class="btn" id="ca-check">checkUpkeep</button><button class="btn primary" id="ca-perform">performUpkeep</button><button class="btn" id="ca-external">External caller settles one</button></div><div class="out" id="ca-out"></div>`;
+      function render(note) {
+        $(el, '#ca-out').innerHTML = 'BACKLOG\n  cursor ' + cursor + ' / ' + jobs + '   settled ' + settled.size + '\n' +
+          '  planned data  ' + (planned ? '[' + planned.start + ', ' + planned.end + ')' : 'none') + '\n\n' +
+          (note || '<span class="dim">checkUpkeep proposes at most 20 jobs. performUpkeep validates its proposal against current state.</span>');
+      }
+      $(el, '#ca-jobs').oninput = e => { jobs = Math.max(0, Number(e.target.value) || 0); if (cursor > jobs) cursor = jobs; render(); };
+      $(el, '#ca-check').onclick = () => { planned = cursor < jobs ? { start: cursor, end: Math.min(cursor + 20, jobs) } : null; render(planned ? '<span class="good">checkUpkeep suggests ' + planned.start + '…' + (planned.end - 1) + '.</span>' : '<span class="dim">No work needed.</span>'); };
+      $(el, '#ca-external').onclick = () => { if (cursor < jobs) { settled.add(cursor); cursor++; } render('<span class="dim">State changed after simulation; planned data may now be stale.</span>'); };
+      $(el, '#ca-perform').onclick = () => {
+        if (!planned || planned.start !== cursor) return render('<span class="bad">Stale performData: returned without side effects.</span>');
+        const end = Math.min(planned.end, jobs, cursor + 20);
+        for (let i = cursor; i < end; i++) settled.add(i);
+        cursor = end; render('<span class="good">Processed a bounded batch. Repeating this calldata now safely returns.</span>');
+      };
+      render();
+    });
+
   /* ---------- export ---------- */
   global.LABS = LABS;
 })(window);

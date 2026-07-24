@@ -1326,6 +1326,73 @@
     })());
 
   /* =========================================================
+     MODULE 14 — Chainlink core stack
+     ========================================================= */
+
+  add('chainlink-ocr', 'OCR moves agreement off chain, not trust away',
+    'Nodes collect and exchange observations off chain; an authorised report is transmitted once and stored by the aggregator behind the consumer-facing proxy.',
+    W, 270,
+    (function () {
+      var s = txt(20, 26, 'OFF-CHAIN DON', 'd-k') + txt(680, 26, 'ON CHAIN', 'd-k');
+      s += box({ x: 24, y: 76, w: 150, h: 56, t: 'market sources', sub: 'venues · APIs', c: 'hot' });
+      s += box({ x: 220, y: 76, w: 150, h: 56, t: 'OCR nodes', sub: 'observations', c: 'hot' });
+      s += box({ x: 416, y: 76, w: 150, h: 56, t: 'quorum report', sub: 'authorised agreement', c: 'acc' });
+      s += box({ x: 648, y: 76, w: 120, h: 56, t: 'aggregator', sub: 'stores round', c: 'acc' });
+      s += box({ x: 800, y: 76, w: 110, h: 56, t: 'consumer', sub: 'validates age', c: 'ok' });
+      s += arr(174, 104, 220, 104, 'hot') + arr(370, 104, 416, 104, 'hot') + arr(566, 104, 648, 104, 'acc', 'transmit') + arr(768, 104, 800, 104, 'ok');
+      s += line(616, 46, 616, 180, 'dash thin');
+      s += mid(99, 168, 'truth can fail here', 'd-m') + mid(295, 168, 'independence can fail here', 'd-m') + mid(491, 168, 'quorum ≠ market truth', 'd-m');
+      s += note(24, 238, 'THE PROXY MAKES THE READ ADDRESS STABLE; THE CONSUMER STILL OWNS FRESHNESS, UNITS, AND RISK LIMITS');
+      return s;
+    })());
+
+  add('chainlink-feed-integration', 'A usable price crosses every guard',
+    'Normalise units once at the boundary. If any health guard fails, block risk-increasing actions while retaining the paths that make positions safer.',
+    W, 280,
+    (function () {
+      var labels = [['proxy', 'answer + updatedAt'], ['positive', 'not a bad cast'], ['fresh', 'within max age'], ['normalise', 'to 18 decimals'], ['risk gate', 'borrow or mint']];
+      var s = txt(20, 28, 'CONSUMER PRICE BOUNDARY', 'd-k');
+      labels.forEach(function (g, i) {
+        var x = 24 + i * 178;
+        s += box({ x: x, y: 54, w: 140, h: 58, t: g[0], sub: g[1], c: i === 4 ? 'ok' : 'acc' });
+        if (i < labels.length - 1) s += arr(x + 140, 83, x + 178, 83, 'acc');
+      });
+      s += arr(612, 112, 612, 164, 'bad') + box({ x: 504, y: 164, w: 216, h: 48, t: 'reject new risk', sub: 'allow repay / top-up', c: 'bad' });
+      s += note(24, 258, 'A CACHED FALLBACK PRICE FOR NEW BORROWS IS NOT RESILIENCE — IT IS UNBOUNDED CREDIT AT AN UNKNOWN MOMENT');
+      return s;
+    })());
+
+  add('chainlink-vrf', 'Randomness is a request lifecycle',
+    'The request binds a player and configuration; fulfilment records a proof-backed word; a later user transaction performs any expensive settlement.',
+    W, 260,
+    (function () {
+      var s = txt(20, 28, 'ASYNC VRF FLOW', 'd-k');
+      s += box({ x: 24, y: 74, w: 150, h: 54, t: 'enter()', sub: 'request id + player', c: 'acc' });
+      s += box({ x: 230, y: 74, w: 160, h: 54, t: 'coordinator', sub: 'confirmations + proof', c: 'hot' });
+      s += box({ x: 446, y: 74, w: 150, h: 54, t: 'fulfil()', sub: 'store word only', c: 'acc' });
+      s += box({ x: 652, y: 74, w: 150, h: 54, t: 'claim()', sub: 'settle in user tx', c: 'ok' });
+      s += arr(174, 101, 230, 101, 'acc', 'async') + arr(390, 101, 446, 101, 'hot') + arr(596, 101, 652, 101, 'ok');
+      s += mid(305, 156, 'delay / retry safe', 'd-m') + mid(521, 156, 'no external calls', 'd-m') + mid(727, 156, 'player-bound', 'd-m');
+      s += note(24, 238, 'DO NOT MINT OR LOOP IN THE CALLBACK — A GAS-LIMIT FAILURE MUST NOT ERASE A PAID-FOR RESULT');
+      return s;
+    })());
+
+  add('chainlink-automation', 'check suggests; perform verifies',
+    'An off-chain simulation can become stale before its transaction lands. A bounded, idempotent on-chain perform function makes retries and competing callers harmless.',
+    W, 270,
+    (function () {
+      var s = txt(20, 28, 'UPKEEP AS A DISTRIBUTED JOB RUNNER', 'd-k');
+      s += box({ x: 24, y: 72, w: 150, h: 52, t: 'checkUpkeep', sub: 'off-chain simulation', c: 'hot' });
+      s += box({ x: 230, y: 72, w: 150, h: 52, t: 'performData', sub: 'hint: cursor + range', c: 'acc' });
+      s += box({ x: 436, y: 72, w: 150, h: 52, t: 'performUpkeep', sub: 'revalidate + cap', c: 'acc' });
+      s += box({ x: 642, y: 72, w: 150, h: 52, t: 'next cursor', sub: 'safe progress', c: 'ok' });
+      s += arr(174, 98, 230, 98, 'hot') + arr(380, 98, 436, 98, 'acc') + arr(586, 98, 642, 98, 'ok');
+      s += mid(305, 156, 'may be stale', 'd-m') + mid(511, 156, 'duplicate? return / skip', 'd-m') + mid(717, 156, 'bounded gas', 'd-m');
+      s += note(24, 244, 'AUTOMATION IMPROVES LIVENESS; A SAFETY-CRITICAL PATH STILL NEEDS A PERMISSIONLESS WAY TO EXECUTE');
+      return s;
+    })());
+
+  /* =========================================================
      MODULE 13 — ecosystem and architecture choices
      ========================================================= */
 
@@ -1634,7 +1701,10 @@
      ========================================================= */
 
   function homeSvg() {
-    var mods = (global.ROADMAP && global.ROADMAP.modules) || [];
+    var roadmap = global.ROADMAP || { modules: [], lessons: [] };
+    var mods = roadmap.modules.filter(function (m) {
+      return roadmap.lessons.some(function (l) { return l.module === m.id; });
+    });
     var n = Math.max(1, mods.length);
     // past six modules a single row squeezes the boxes below their own labels,
     // so the route wraps onto a second row instead of shrinking
@@ -1654,7 +1724,7 @@
       4: 'test · deploy', 5: 'exploit · defend', 6: 'AMM · rollup · ZK',
       7: 'objects · Move', 8: 'quorum · anchors', 9: 'metadata · sinks',
       10: 'nodes · alerts', 11: 'MEV · bridges', 12: 'feeds · reports',
-      13: 'chains · DAOs'
+      13: 'chains · DAOs', 14: 'OCR · VRF · upkeep'
     };
     mods.forEach(function (m, i) {
       var r = Math.floor(i / perRow), c = i % perRow;
@@ -1842,7 +1912,11 @@
   global.DIA = {
     get: function (id) { return D[id] || []; },
     // the title counts whatever the curriculum currently holds
-    home: function () { return { title: (((global.ROADMAP && global.ROADMAP.modules) || []).length || 0) + ' modules, one path', cap:'Each module assumes the one before it. The labs get harder in exactly the same order.', svg: homeSvg() }; },
+    home: function () {
+      var roadmap = global.ROADMAP || { modules: [], lessons: [] };
+      var count = roadmap.modules.filter(function (m) { return roadmap.lessons.some(function (l) { return l.module === m.id; }); }).length;
+      return { title: count + ' modules, one path', cap:'Each module assumes the one before it. The labs get harder in exactly the same order.', svg: homeSvg() };
+    },
     count: function () { var t = 0; for (var k in D) if (Object.prototype.hasOwnProperty.call(D, k)) t += D[k].length; return t; },
     ids: function () { return Object.keys(D); },
     animate: animate,

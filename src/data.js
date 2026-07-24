@@ -5,7 +5,9 @@
 const R = window.ROADMAP || { meta: {}, modules: [], lessons: [] }
 
 export const meta = R.meta
-export const modules = R.modules
+// Module metadata may be staged ahead of its curriculum. Keep navigation to
+// modules that actually have lessons, so placeholders do not appear as 0/0.
+export const modules = R.modules.filter(m => R.lessons.some(l => l.module === m.id))
 export const LABS = window.LABS || {}
 
 export const lessons = R.lessons.slice().sort((a, b) =>

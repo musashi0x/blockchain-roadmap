@@ -23,7 +23,8 @@
     a.module - b.module || a.num - b.num);
   const byId = {};
   lessons.forEach((l, i) => { byId[l.id] = l; l._i = i; });
-  const modules = R.modules;
+  // Keep staged, lesson-less module metadata out of the navigation.
+  const modules = R.modules.filter(m => R.lessons.some(l => l.module === m.id));
   const modColor = {};
   modules.forEach(m => modColor[m.id] = m.color);
 
